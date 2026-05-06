@@ -1,0 +1,5 @@
+Strategy,Cumulative Return,Annual Return,Annual Volatility,Sharpe Ratio,Sortino Ratio,Maximum Drawdown,Calmar Ratio,VaR 95%,CVaR 95%,Beta vs NIFTY 50,Tracking Error,Information Ratio
+Equal Weight Portfolio,123.32%,17.80%,13.68%,0.8623,1.1593,-16.67%,1.0675,1.41%,2.02%,0.9449,4.38%,1.4018
+One Random Portfolio,121.73%,17.63%,13.91%,0.8359,1.1286,-17.17%,1.0264,1.44%,2.05%,0.9521,4.78%,1.2675
+Maximum Sharpe Ratio Portfolio,318.39%,33.88%,15.15%,1.8400,2.5959,-20.43%,1.6585,1.45%,2.07%,0.8639,9.61%,1.9894
+Minimum Volatility Portfolio,93.57%,14.41%,10.91%,0.7713,1.1574,-17.92%,0.8046,1.09%,1.49%,0.6788,7.18%,0.4081

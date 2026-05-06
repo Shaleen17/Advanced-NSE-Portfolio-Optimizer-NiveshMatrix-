@@ -1,0 +1,5 @@
+Strategy,Annual Return,Annual Risk,Sharpe Ratio
+Equal Weight Portfolio,17.32%,13.68%,0.8276
+One Random Portfolio,17.21%,13.91%,0.8058
+Maximum Sharpe Ratio Portfolio,30.35%,15.15%,1.6066
+Minimum Volatility Portfolio,14.06%,10.91%,0.7392
