@@ -47,6 +47,7 @@ from src.optimizer import (
     optimize_min_volatility,
     run_monte_carlo_simulation,
 )
+from src.providers import fetch_live_quotes, get_configured_provider_names
 from src.reporting import (
     dataframe_to_csv_bytes,
     final_conclusion,
@@ -815,7 +816,7 @@ def render_auth_page() -> None:
             submitted = st.form_submit_button(
                 "Create account" if is_signup else "Login",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
             )
 
         if submitted:
@@ -832,10 +833,10 @@ def render_auth_page() -> None:
 
         if is_signup:
             st.markdown('<div class="auth-switch">Already a member?</div>', unsafe_allow_html=True)
-            st.button("Login instead", use_container_width=True, on_click=switch_auth_mode, args=("login",))
+            st.button("Login instead", width="stretch", on_click=switch_auth_mode, args=("login",))
         else:
             st.markdown('<div class="auth-switch">Not a member? <span>Create an account</span></div>', unsafe_allow_html=True)
-            st.button("Create an account", use_container_width=True, on_click=switch_auth_mode, args=("signup",))
+            st.button("Create an account", width="stretch", on_click=switch_auth_mode, args=("signup",))
 
 
 def metric_card(label: str, value: str, signed_value: float | None = None) -> None:
@@ -903,7 +904,14 @@ def style_numeric_table(
                 return f"color: {CHART_COLORS['loss']}"
         return f"color: {CHART_COLORS['text']}"
 
-    return dataframe.style.format(formatters).applymap(color_signed)
+    return dataframe.style.format(formatters).map(color_signed)
+
+
+@st.cache_data(show_spinner=False, ttl=60)
+def load_live_quotes_cached(tickers: tuple[str, ...], refresh_nonce: int) -> pd.DataFrame:
+    """Cache multi-provider quote calls to protect free API limits."""
+    del refresh_nonce
+    return fetch_live_quotes(tickers)
 
 
 @st.cache_data(show_spinner=False)
@@ -923,10 +931,28 @@ def load_benchmark_cached(start_date: date, end_date: date, use_cache_first: boo
     return get_benchmark_returns(start_date, end_date, use_cache_first)
 
 
+def sidebar_realtime_controls(selected_count: int) -> tuple[bool, int, int]:
+    """Collect live data controls without slowing the historical workflow."""
+    st.sidebar.markdown("### Real-Time Data")
+    live_quotes_enabled = st.sidebar.checkbox("Load live quote snapshot", value=False)
+    max_quote_count = min(max(selected_count, 1), 20)
+    live_quote_count = st.sidebar.slider(
+        "Live quote symbols",
+        min_value=1,
+        max_value=max_quote_count,
+        value=max(1, min(selected_count, 8)),
+        step=1,
+    )
+    st.session_state.setdefault("quote_refresh_nonce", 0)
+    if st.sidebar.button("Refresh live quotes now", width="stretch"):
+        st.session_state.quote_refresh_nonce += 1
+    return live_quotes_enabled, live_quote_count, int(st.session_state.quote_refresh_nonce)
+
+
 def sidebar_inputs() -> tuple[list[str], date, date, bool, int, int, float, float, int]:
     """Collect sidebar settings."""
     if LOGO_PATH.exists():
-        st.sidebar.image(str(LOGO_PATH), use_container_width=True)
+        st.sidebar.image(str(LOGO_PATH), width="stretch")
     user = st.session_state.get("user") or {}
     st.sidebar.markdown(f"## {BRAND_NAME}")
     st.sidebar.markdown(
@@ -938,7 +964,7 @@ def sidebar_inputs() -> tuple[list[str], date, date, bool, int, int, float, floa
         """,
         unsafe_allow_html=True,
     )
-    if st.sidebar.button("Logout", use_container_width=True):
+    if st.sidebar.button("Logout", width="stretch"):
         logout()
 
     st.sidebar.markdown("### Portfolio Controls")
@@ -1019,6 +1045,9 @@ def main() -> None:
         transaction_cost,
         factor_size,
     ) = sidebar_inputs()
+    live_quotes_enabled, live_quote_count, quote_refresh_nonce = sidebar_realtime_controls(
+        len(selected_tickers)
+    )
 
     render_hero()
 
@@ -1080,6 +1109,7 @@ def main() -> None:
             "Factor Investing",
             "Machine Learning",
             "Report",
+            "Live Market",
             "Downloads",
         ]
     )
@@ -1104,7 +1134,7 @@ def main() -> None:
             )
 
         st.markdown("#### Adjusted Close Price Data")
-        st.dataframe(prices.head(), use_container_width=True)
+        st.dataframe(prices.head(), width="stretch")
 
         missing_table = pd.DataFrame(
             {
@@ -1113,8 +1143,8 @@ def main() -> None:
             }
         )
         st.markdown("#### Missing Value Handling")
-        st.dataframe(missing_table, use_container_width=True, hide_index=True)
-        st.pyplot(price_trend_chart(prices), use_container_width=True)
+        st.dataframe(missing_table, width="stretch", hide_index=True)
+        st.pyplot(price_trend_chart(prices), width="stretch")
 
     with tabs[1]:
         st.subheader("Intermediate: Returns, Risk, Covariance, and Diversification")
@@ -1125,7 +1155,7 @@ def main() -> None:
         )
 
         st.markdown("#### Daily Returns")
-        st.dataframe(daily_returns.head(), use_container_width=True)
+        st.dataframe(daily_returns.head(), width="stretch")
 
         asset_summary = summarize_assets(prices)
         st.markdown("#### Annual Expected Return and Annual Volatility")
@@ -1134,14 +1164,14 @@ def main() -> None:
                 asset_summary,
                 percent_columns=["Total Return", "Expected Annual Return", "Annual Volatility"],
             ),
-            use_container_width=True,
+            width="stretch",
         )
 
         st.markdown("#### Covariance Matrix")
-        st.dataframe(annual_covariance, use_container_width=True)
+        st.dataframe(annual_covariance, width="stretch")
         st.markdown("#### Correlation Matrix")
-        st.dataframe(correlation_matrix, use_container_width=True)
-        st.pyplot(correlation_heatmap(correlation_matrix), use_container_width=True)
+        st.dataframe(correlation_matrix, width="stretch")
+        st.pyplot(correlation_heatmap(correlation_matrix), width="stretch")
 
         random_performance = calculate_portfolio_performance(
             random_weights, annual_returns, annual_covariance, risk_free_rate
@@ -1153,7 +1183,7 @@ def main() -> None:
             metric_card("Random Portfolio Risk", format_percent(random_performance["Annual Risk"]))
         with cards[2]:
             metric_card("Random Portfolio Sharpe", format_number(random_performance["Sharpe Ratio"]), random_performance["Sharpe Ratio"])
-        st.pyplot(returns_distribution_chart(daily_returns), use_container_width=True)
+        st.pyplot(returns_distribution_chart(daily_returns), width="stretch")
 
     with tabs[2]:
         st.subheader("Advanced: Monte Carlo, Efficient Frontier, and SciPy Optimization")
@@ -1161,7 +1191,7 @@ def main() -> None:
             "Optimization constraints",
             "The optimized portfolios are long-only. Total weights must equal 1, no short selling is allowed, and each stock weight is between 0 and 1.",
         )
-        st.pyplot(efficient_frontier_chart(random_results, comparison), use_container_width=True)
+        st.pyplot(efficient_frontier_chart(random_results, comparison), width="stretch")
 
         st.markdown("#### Strategy Comparison")
         st.dataframe(
@@ -1170,7 +1200,7 @@ def main() -> None:
                 percent_columns=["Expected Annual Return", "Annual Risk"],
                 number_columns=["Sharpe Ratio"],
             ),
-            use_container_width=True,
+            width="stretch",
         )
 
         allocations = {
@@ -1183,11 +1213,11 @@ def main() -> None:
         selected_table = allocations[selected_allocation]
         st.dataframe(
             style_numeric_table(selected_table, percent_columns=["Weight"]),
-            use_container_width=True,
+            width="stretch",
         )
         st.pyplot(
             allocation_chart(selected_table, "Weight", f"{selected_allocation} Allocation"),
-            use_container_width=True,
+            width="stretch",
         )
 
     with tabs[3]:
@@ -1211,10 +1241,10 @@ def main() -> None:
                     "Information Ratio",
                 ],
             ),
-            use_container_width=True,
+            width="stretch",
         )
-        st.pyplot(cumulative_return_chart(strategy_returns, "Strategy Cumulative Returns"), use_container_width=True)
-        st.pyplot(drawdown_chart(strategy_returns, "Strategy Drawdowns"), use_container_width=True)
+        st.pyplot(cumulative_return_chart(strategy_returns, "Strategy Cumulative Returns"), width="stretch")
+        st.pyplot(drawdown_chart(strategy_returns, "Strategy Drawdowns"), width="stretch")
 
     with tabs[4]:
         st.subheader("Expert: Monthly Rebalancing Backtest")
@@ -1241,12 +1271,12 @@ def main() -> None:
                     ],
                     number_columns=["Sharpe Ratio", "Sortino Ratio", "Calmar Ratio"],
                 ),
-                use_container_width=True,
+                width="stretch",
             )
-            st.pyplot(cumulative_return_chart(backtest_frame, "Backtest Cumulative Returns"), use_container_width=True)
-            st.pyplot(turnover_chart(turnover_table), use_container_width=True)
+            st.pyplot(cumulative_return_chart(backtest_frame, "Backtest Cumulative Returns"), width="stretch")
+            st.pyplot(turnover_chart(turnover_table), width="stretch")
             with st.expander("View monthly backtest weights"):
-                st.dataframe(backtest_weights, use_container_width=True)
+                st.dataframe(backtest_weights, width="stretch")
         except ValueError as error:
             st.warning(str(error))
 
@@ -1268,11 +1298,11 @@ def main() -> None:
                         "Black-Litterman Weight",
                     ],
                 ),
-                use_container_width=True,
+                width="stretch",
             )
             st.pyplot(
                 allocation_chart(bl_allocation, "Black-Litterman Weight", "Black-Litterman Allocation"),
-                use_container_width=True,
+                width="stretch",
             )
         except Exception as error:
             st.warning(f"Black-Litterman model could not be calculated: {error}")
@@ -1287,9 +1317,9 @@ def main() -> None:
                 percent_columns=["Momentum 6M", "Momentum 12M", "Annual Volatility", "Trend Ratio"],
                 number_columns=["Momentum Score", "Low Volatility Score", "Trend Score", "Overall Factor Score"],
             ),
-            use_container_width=True,
+            width="stretch",
         )
-        st.pyplot(factor_score_chart(factor_scores), use_container_width=True)
+        st.pyplot(factor_score_chart(factor_scores), width="stretch")
         st.markdown("#### Factor Portfolio Weights")
         st.dataframe(
             style_numeric_table(
@@ -1297,7 +1327,7 @@ def main() -> None:
                 percent_columns=["Factor Weight"],
                 number_columns=["Overall Factor Score"],
             ),
-            use_container_width=True,
+            width="stretch",
         )
 
     with tabs[7]:
@@ -1318,7 +1348,7 @@ def main() -> None:
                         percent_columns=["Directional Accuracy"],
                         number_columns=["MAE", "RMSE"],
                     ),
-                    use_container_width=True,
+                    width="stretch",
                 )
                 st.markdown("#### Latest Predictions")
                 st.dataframe(
@@ -1326,9 +1356,9 @@ def main() -> None:
                         predictions,
                         percent_columns=["Predicted 21D Return", "Annualized Predicted Return"],
                     ),
-                    use_container_width=True,
+                    width="stretch",
                 )
-                st.pyplot(ml_prediction_chart(predictions), use_container_width=True)
+                st.pyplot(ml_prediction_chart(predictions), width="stretch")
             except Exception as error:
                 st.warning(f"ML prediction could not be completed: {error}")
         else:
@@ -1340,9 +1370,9 @@ def main() -> None:
         for step in methodology_steps():
             st.markdown(f"- {step}")
         st.markdown("#### Formula Reference")
-        st.dataframe(formula_reference(), use_container_width=True, hide_index=True)
+        st.dataframe(formula_reference(), width="stretch", hide_index=True)
         st.markdown("#### System File Map")
-        st.dataframe(project_file_purpose(), use_container_width=True, hide_index=True)
+        st.dataframe(project_file_purpose(), width="stretch", hide_index=True)
         st.markdown("#### Final Conclusion")
         st.write(final_conclusion())
         st.markdown("#### Future Scope")
@@ -1355,6 +1385,119 @@ def main() -> None:
         )
 
     with tabs[9]:
+        st.subheader("Live / Near-Real-Time Market Snapshot")
+        info_card(
+            "Provider fallback",
+            "Quotes use your configured free API keys with caching and fallback. "
+            "Free APIs may be delayed, limited, or missing some NSE symbols.",
+        )
+        configured_providers = get_configured_provider_names()
+        if configured_providers:
+            st.caption("Configured providers: " + ", ".join(configured_providers))
+        else:
+            st.warning("No external API keys are configured. Add keys in Streamlit secrets.")
+
+        quote_tickers = tuple(selected_tickers[:live_quote_count])
+        if live_quotes_enabled and configured_providers:
+            with st.spinner("Fetching cached live quote snapshot..."):
+                live_quotes = load_live_quotes_cached(quote_tickers, quote_refresh_nonce)
+            if live_quotes.empty:
+                st.warning("No quote data was returned by the configured providers.")
+            else:
+                live_quotes = live_quotes.copy()
+                last_prices = prices.iloc[-1].reindex(live_quotes["Ticker"]).reset_index(drop=True)
+                live_quotes["Latest Historical Close"] = last_prices
+                live_quotes["Gap vs Historical Close %"] = (
+                    live_quotes["Price"] / live_quotes["Latest Historical Close"] - 1
+                )
+                live_quotes["Quote Available"] = live_quotes["Price"].notna()
+
+                available_count = int(live_quotes["Quote Available"].sum())
+                provider_count = live_quotes.loc[live_quotes["Quote Available"], "Provider"].nunique()
+                provider_text = ", ".join(
+                    live_quotes.loc[live_quotes["Quote Available"], "Provider"].dropna().unique().tolist()
+                )
+
+                live_cards = st.columns(4)
+                with live_cards[0]:
+                    metric_card("Quote Symbols", f"{available_count}/{len(live_quotes)}")
+                with live_cards[1]:
+                    metric_card("Providers Used", str(provider_count))
+                with live_cards[2]:
+                    best_change = live_quotes["Change %"].dropna().max()
+                    metric_card(
+                        "Best Live Move",
+                        format_percent(best_change) if pd.notna(best_change) else "N/A",
+                        best_change if pd.notna(best_change) else None,
+                    )
+                with live_cards[3]:
+                    worst_change = live_quotes["Change %"].dropna().min()
+                    metric_card(
+                        "Worst Live Move",
+                        format_percent(worst_change) if pd.notna(worst_change) else "N/A",
+                        worst_change if pd.notna(worst_change) else None,
+                    )
+
+                st.caption(
+                    "Source used: "
+                    + (provider_text or "None")
+                    + ". Cached for 60 seconds to protect free API limits."
+                )
+                st.dataframe(
+                    style_numeric_table(
+                        live_quotes,
+                        percent_columns=["Change %", "Gap vs Historical Close %"],
+                        number_columns=[
+                            "Price",
+                            "Previous Close",
+                            "Change",
+                            "Open",
+                            "High",
+                            "Low",
+                            "Latest Historical Close",
+                        ],
+                    ),
+                    width="stretch",
+                    hide_index=True,
+                )
+
+                available_quotes = live_quotes[live_quotes["Quote Available"]].copy()
+                if not available_quotes.empty:
+                    movers = available_quotes.sort_values("Change %", ascending=False)
+                    col_gain, col_loss = st.columns(2)
+                    with col_gain:
+                        st.markdown("#### Top Positive Moves")
+                        st.dataframe(
+                            style_numeric_table(
+                                movers.head(5)[["Ticker", "Provider", "Price", "Change %"]],
+                                percent_columns=["Change %"],
+                                number_columns=["Price"],
+                            ),
+                            width="stretch",
+                            hide_index=True,
+                        )
+                    with col_loss:
+                        st.markdown("#### Top Negative Moves")
+                        st.dataframe(
+                            style_numeric_table(
+                                movers.tail(5).sort_values("Change %")[
+                                    ["Ticker", "Provider", "Price", "Change %"]
+                                ],
+                                percent_columns=["Change %"],
+                                number_columns=["Price"],
+                            ),
+                            width="stretch",
+                            hide_index=True,
+                        )
+        else:
+            st.info("Enable live quote snapshot in the sidebar to call configured free APIs.")
+
+        st.warning(
+            "Educational disclaimer: this is near-real-time or delayed third-party data, "
+            "not official exchange-grade NSE live data and not financial advice."
+        )
+
+    with tabs[10]:
         st.subheader("Downloadable CSV Outputs")
         st.download_button(
             "Download strategy comparison",

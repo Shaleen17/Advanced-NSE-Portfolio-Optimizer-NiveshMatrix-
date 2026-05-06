@@ -102,21 +102,27 @@ def run_monte_carlo_simulation(
 
     rng = np.random.default_rng(seed)
     tickers = annual_returns.index.tolist()
-    rows: list[dict[str, float]] = []
+    random_matrix = rng.random((portfolio_count, len(tickers)))
+    weights = random_matrix / random_matrix.sum(axis=1, keepdims=True)
+    returns = weights @ annual_returns.to_numpy(dtype=float)
+    covariance = annual_covariance.to_numpy(dtype=float)
+    risks = np.sqrt(np.einsum("ij,jk,ik->i", weights, covariance, weights))
+    sharpe_values = np.divide(
+        returns - risk_free_rate,
+        risks,
+        out=np.zeros_like(returns),
+        where=risks > 0,
+    )
 
-    for _ in range(portfolio_count):
-        weights = normalize_weights(rng.random(len(tickers)))
-        expected_return = portfolio_return(weights, annual_returns)
-        expected_risk = portfolio_risk(weights, annual_covariance)
-        row = {
-            "Expected Annual Return": expected_return,
-            "Annual Risk": expected_risk,
-            "Sharpe Ratio": sharpe_ratio(expected_return, expected_risk, risk_free_rate),
+    results = pd.DataFrame(
+        {
+            "Expected Annual Return": returns,
+            "Annual Risk": risks,
+            "Sharpe Ratio": sharpe_values,
         }
-        row.update({ticker: weight for ticker, weight in zip(tickers, weights)})
-        rows.append(row)
-
-    return pd.DataFrame(rows)
+    )
+    weights_frame = pd.DataFrame(weights, columns=tickers)
+    return pd.concat([results, weights_frame], axis=1)
 
 
 def best_random_portfolios(results: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
