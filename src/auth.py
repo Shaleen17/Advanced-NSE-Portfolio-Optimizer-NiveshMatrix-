@@ -134,6 +134,11 @@ def create_user(name: str, email: str, password: str) -> AuthResult:
         result = collection.insert_one(document)
         document["_id"] = result.inserted_id
         return AuthResult(True, "Account created successfully.", sanitize_user(document))
+    except AuthConfigError:
+        return AuthResult(
+            False,
+            "Authentication is not configured. Add MongoDB settings in Streamlit app secrets.",
+        )
     except DuplicateKeyError:
         return AuthResult(False, "An account with this email already exists.")
     except (ServerSelectionTimeoutError, PyMongoError):
@@ -166,6 +171,11 @@ def authenticate_user(email: str, password: str) -> AuthResult:
         )
         user["last_login_at"] = datetime.now(timezone.utc)
         return AuthResult(True, "Login successful.", sanitize_user(user))
+    except AuthConfigError:
+        return AuthResult(
+            False,
+            "Authentication is not configured. Add MongoDB settings in Streamlit app secrets.",
+        )
     except (ServerSelectionTimeoutError, PyMongoError):
         return AuthResult(
             False,
