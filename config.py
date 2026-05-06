@@ -18,6 +18,8 @@ REPORTS_DIR = BASE_DIR / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 MPL_CONFIG_DIR = BASE_DIR / ".matplotlib"
 LOGO_PATH = ASSETS_DIR / "Brand_Logo.png"
+AUTH_IMAGE_PATH = ASSETS_DIR / "authentication_page" / "authentication_page.jpg"
+HOME_IMAGE_PATH = ASSETS_DIR / "authentication_page" / "authentication_page.jpg"
 CLEANED_PRICE_FILE = PROCESSED_DATA_DIR / "nse_adjusted_close_cleaned.csv"
 BENCHMARK_RETURNS_FILE = OUTPUT_DATA_DIR / "nifty50_benchmark_returns.csv"
 

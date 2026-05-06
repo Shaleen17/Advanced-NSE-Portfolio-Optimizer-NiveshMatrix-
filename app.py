@@ -9,17 +9,20 @@ import pandas as pd
 import streamlit as st
 
 from config import (
+    AUTH_IMAGE_PATH,
     BRAND_NAME,
     CHART_COLORS,
     DEFAULT_END_DATE,
     DEFAULT_START_DATE,
     DEFAULT_TRANSACTION_COST,
+    HOME_IMAGE_PATH,
     LOGO_PATH,
     NSE_TICKERS,
     PROJECT_NAME,
     RISK_FREE_RATE,
     ensure_project_folders,
 )
+from src.auth import authenticate_user, create_user, image_to_data_uri
 from src.backtest import compare_backtest_to_equal_weight, run_monthly_rebalance_backtest
 from src.black_litterman import black_litterman_allocation
 from src.data_loader import DataLoadError, get_benchmark_returns, get_price_data
@@ -80,13 +83,59 @@ def inject_css() -> None:
     st.markdown(
         f"""
         <style>
+        #MainMenu, footer, [data-testid="stToolbar"], .stDeployButton {{
+            display: none !important;
+            visibility: hidden !important;
+        }}
         .stApp {{
             background: {CHART_COLORS["background"]};
             color: {CHART_COLORS["text"]};
         }}
         [data-testid="stSidebar"] {{
-            background: {CHART_COLORS["background"]};
-            border-right: 1px solid {CHART_COLORS["border"]};
+            background:
+                radial-gradient(circle at 25% 0%, rgba(255, 0, 45, 0.22), transparent 30%),
+                linear-gradient(180deg, #000000 0%, #090000 45%, #160006 100%);
+            border-right: 1px solid rgba(255, 255, 255, 0.10);
+            box-shadow: 18px 0 40px rgba(255, 0, 45, 0.10);
+        }}
+        [data-testid="stSidebar"] img {{
+            max-width: 160px;
+            margin: 10px auto 18px auto;
+            display: block;
+        }}
+        [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{
+            color: #FFFFFF !important;
+            letter-spacing: 0;
+        }}
+        [data-testid="stSidebar"] label {{
+            color: #FFFFFF !important;
+            font-weight: 700 !important;
+        }}
+        [data-testid="stSidebar"] .stMultiSelect [data-baseweb="tag"] {{
+            background: #FF0033 !important;
+            color: #FFFFFF !important;
+            border-radius: 7px !important;
+        }}
+        [data-testid="stSidebar"] .stCheckbox [data-testid="stMarkdownContainer"] p {{
+            color: #FFFFFF !important;
+        }}
+        [data-testid="stSidebar"] div[data-baseweb="select"],
+        [data-testid="stSidebar"] input {{
+            background-color: #141414 !important;
+            color: #FFFFFF !important;
+            border-color: rgba(255, 255, 255, 0.14) !important;
+        }}
+        [data-testid="stSidebar"] .stSlider div[role="slider"] {{
+            background-color: #FF0033 !important;
+            border-color: #FFFFFF !important;
+        }}
+        [data-testid="stSidebar"] .stSlider div[data-testid="stTickBar"] {{
+            background: rgba(255, 255, 255, 0.18) !important;
+        }}
+        [data-testid="stSidebar"] button {{
+            border-radius: 8px !important;
+            border: 1px solid rgba(255, 0, 45, 0.65) !important;
+            color: #FFFFFF !important;
         }}
         h1, h2, h3, h4, h5, h6, p, span, div, label {{
             color: {CHART_COLORS["text"]};
@@ -145,6 +194,454 @@ def inject_css() -> None:
             color: {CHART_COLORS["muted"]};
             font-size: 13px;
         }}
+        .stApp:has(.home-marker) {{
+            background:
+                radial-gradient(circle at 18% 16%, rgba(255, 0, 51, 0.16), transparent 22%),
+                radial-gradient(circle at 80% 18%, rgba(255, 181, 28, 0.12), transparent 20%),
+                linear-gradient(135deg, #000000 0%, #0A0A0A 52%, #160006 100%) !important;
+        }}
+        .block-container:has(.home-marker) {{
+            max-width: none !important;
+            padding: 0 !important;
+        }}
+        .public-site {{
+            min-height: 100vh;
+            width: min(1760px, 92vw);
+            margin: 0 auto;
+            padding: 28px 0 56px;
+        }}
+        .public-nav {{
+            min-height: 82px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }}
+        .public-brand {{
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 24px;
+            font-weight: 900;
+        }}
+        .public-brand img {{
+            width: 48px;
+            height: 48px;
+            object-fit: contain;
+        }}
+        .public-nav-right {{
+            display: flex;
+            align-items: center;
+            gap: 28px;
+        }}
+        .public-nav-copy {{
+            color: #C9C9C9 !important;
+            font-size: 15px;
+        }}
+        .public-nav-actions {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }}
+        .public-nav-actions a {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 112px;
+            min-height: 44px;
+            padding: 0 22px;
+            border-radius: 999px !important;
+            text-decoration: none !important;
+            font-weight: 850 !important;
+            font-size: 15px;
+            transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+        }}
+        .public-nav-actions a:hover {{
+            transform: translateY(-1px);
+        }}
+        .public-login {{
+            background: transparent !important;
+            color: #FFFFFF !important;
+            border: 1px solid rgba(255, 255, 255, 0.24) !important;
+        }}
+        .public-signup {{
+            background: #FFB51C !important;
+            color: #000000 !important;
+            border: 1px solid #FFB51C !important;
+            box-shadow: 0 12px 28px rgba(255, 181, 28, 0.20);
+        }}
+        .public-hero {{
+            display: grid;
+            grid-template-columns: minmax(0, 0.92fr) minmax(520px, 1.08fr);
+            align-items: center;
+            gap: min(5vw, 78px);
+            min-height: calc(100vh - 166px);
+            padding: 58px 0 12px;
+        }}
+        .public-eyebrow {{
+            color: #FFB51C !important;
+            font-size: 14px;
+            font-weight: 900;
+            letter-spacing: 0;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }}
+        .public-title {{
+            font-size: clamp(52px, 5.4vw, 88px);
+            line-height: 1.04;
+            font-weight: 900;
+            max-width: 780px;
+        }}
+        .public-title span {{
+            color: #FF0033 !important;
+        }}
+        .public-subtitle {{
+            color: #D7D7D7 !important;
+            font-size: clamp(18px, 1.6vw, 24px);
+            line-height: 1.55;
+            max-width: 690px;
+            margin-top: 24px;
+        }}
+        .public-cta-row {{
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-top: 32px;
+        }}
+        .public-cta-row a {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 52px;
+            padding: 0 28px;
+            border-radius: 999px;
+            text-decoration: none !important;
+            font-weight: 900;
+        }}
+        .public-primary {{
+            background: #FFB51C;
+            color: #000000 !important;
+            box-shadow: 0 18px 40px rgba(255, 181, 28, 0.20);
+        }}
+        .public-secondary {{
+            color: #FFFFFF !important;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }}
+        .public-feature-row {{
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            margin-top: 34px;
+            max-width: 760px;
+        }}
+        .public-feature {{
+            background: rgba(255, 255, 255, 0.045);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 8px;
+            padding: 16px;
+        }}
+        .public-feature strong {{
+            color: #FFFFFF !important;
+            display: block;
+            font-size: 16px;
+            margin-bottom: 6px;
+        }}
+        .public-feature span {{
+            color: #BDBDBD !important;
+            font-size: 13px;
+            line-height: 1.4;
+        }}
+        .public-visual {{
+            min-height: min(66vh, 660px);
+            border-radius: 28px;
+            background-size: cover;
+            background-position: left center;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 28px 95px rgba(0, 0, 0, 0.72), inset 0 0 120px rgba(0, 0, 0, 0.45);
+        }}
+        .public-visual::after {{
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(90deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.50)),
+                radial-gradient(circle at 88% 16%, rgba(255, 181, 28, 0.16), transparent 24%);
+        }}
+        .public-stat-strip {{
+            position: absolute;
+            left: 28px;
+            right: 28px;
+            bottom: 28px;
+            z-index: 2;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }}
+        .public-stat {{
+            background: rgba(0, 0, 0, 0.62);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            padding: 14px;
+            backdrop-filter: blur(14px);
+        }}
+        .public-stat strong {{
+            display: block;
+            color: #FFFFFF !important;
+            font-size: 22px;
+            margin-bottom: 4px;
+        }}
+        .public-stat span {{
+            color: #CFCFCF !important;
+            font-size: 12px;
+        }}
+        @media (max-width: 980px) {{
+            .public-site {{
+                width: min(92vw, 680px);
+                padding-top: 18px;
+            }}
+            .public-nav {{
+                align-items: center;
+                min-height: 74px;
+            }}
+            .public-nav-copy {{
+                display: none;
+            }}
+            .public-nav-actions a {{
+                min-width: auto;
+                min-height: 38px;
+                padding: 0 14px;
+            }}
+            .public-hero {{
+                grid-template-columns: 1fr;
+                min-height: 0;
+                padding-top: 34px;
+            }}
+            .public-feature-row {{
+                grid-template-columns: 1fr;
+            }}
+            .public-cta-row {{
+                flex-direction: column;
+                align-items: stretch;
+            }}
+            .public-visual {{
+                min-height: 460px;
+            }}
+            .public-stat-strip {{
+                grid-template-columns: 1fr;
+            }}
+        }}
+        .stApp:has(.auth-marker) {{
+            background:
+                radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.07), transparent 20%),
+                radial-gradient(circle at 76% 82%, rgba(255, 181, 28, 0.10), transparent 24%),
+                linear-gradient(135deg, #272727 0%, #101010 46%, #030303 100%) !important;
+        }}
+        .block-container:has(.auth-marker) {{
+            max-width: none !important;
+            padding: clamp(22px, 4vh, 54px) 0 !important;
+        }}
+        .block-container:has(.auth-marker) [data-testid="stHorizontalBlock"] {{
+            width: min(1680px, 92vw);
+            min-height: clamp(680px, 82vh, 860px);
+            margin: 0 auto;
+            padding: 18px;
+            background: #000000;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 38px;
+            box-shadow: 0 34px 100px rgba(0, 0, 0, 0.78);
+            gap: clamp(24px, 3vw, 58px) !important;
+            align-items: stretch;
+            overflow: hidden;
+        }}
+        .block-container:has(.auth-marker) [data-testid="column"] {{
+            min-height: clamp(644px, 78vh, 824px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }}
+        .block-container:has(.auth-marker) [data-testid="column"]:first-child > div {{
+            height: 100%;
+        }}
+        .block-container:has(.auth-marker) [data-testid="column"]:nth-child(2) > div {{
+            width: min(520px, 90%);
+            margin: auto;
+        }}
+        .auth-visual {{
+            min-height: clamp(644px, 78vh, 824px);
+            height: 100%;
+            border-radius: 28px;
+            position: relative;
+            overflow: hidden;
+            background: #080808;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: inset -90px 0 150px rgba(0, 0, 0, 0.22);
+        }}
+        .auth-visual img {{
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: left center;
+            opacity: 0.92;
+        }}
+        .auth-visual::after {{
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(90deg, rgba(0,0,0,0.12), rgba(0,0,0,0.55)),
+                radial-gradient(circle at 16% 18%, rgba(0, 255, 255, 0.16), transparent 26%);
+            pointer-events: none;
+        }}
+        .auth-visual-copy {{
+            position: absolute;
+            left: clamp(26px, 4vw, 62px);
+            bottom: clamp(28px, 5vw, 72px);
+            z-index: 2;
+            max-width: 520px;
+        }}
+        .auth-visual-copy span {{
+            display: inline-flex;
+            color: #FFB51C !important;
+            font-size: 13px;
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }}
+        .auth-visual-copy strong {{
+            display: block;
+            color: #FFFFFF !important;
+            font-size: clamp(38px, 4vw, 58px);
+            line-height: 1.08;
+            letter-spacing: 0;
+        }}
+        .auth-heading-wrap {{
+            text-align: center;
+            margin-bottom: 34px;
+        }}
+        .auth-title {{
+            text-align: center;
+            color: #F4F4F4 !important;
+            font-size: clamp(38px, 4vw, 58px);
+            font-weight: 850;
+            line-height: 1.05;
+            margin-bottom: 16px;
+        }}
+        .auth-subtitle {{
+            color: #D9D9D9 !important;
+            text-align: center;
+            font-size: clamp(16px, 1.15vw, 20px);
+            line-height: 1.45;
+        }}
+        .auth-form-card {{
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            padding: 28px;
+            box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42);
+        }}
+        .block-container:has(.auth-marker) [data-testid="stForm"] {{
+            background: rgba(255, 255, 255, 0.025) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 18px !important;
+            padding: 28px !important;
+            box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42) !important;
+        }}
+        .block-container:has(.auth-marker) [data-testid="stForm"] [data-testid="stVerticalBlock"] {{
+            gap: 0.72rem !important;
+        }}
+        .block-container:has(.auth-marker) [data-testid="stForm"] label p,
+        .block-container:has(.auth-marker) [data-testid="stTextInput"] label p {{
+            color: #EDEDED !important;
+            font-size: 14px !important;
+            font-weight: 850 !important;
+            margin-bottom: 7px !important;
+        }}
+        .block-container:has(.auth-marker) [data-testid="stTextInput"] input {{
+            background: #1C1C1C !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            color: #FFFFFF !important;
+            border-radius: 10px !important;
+            min-height: 54px;
+            font-size: 17px !important;
+            padding: 0 18px !important;
+            box-shadow: none !important;
+        }}
+        .block-container:has(.auth-marker) [data-testid="stTextInput"] input:focus {{
+            border: 1px solid rgba(255, 181, 28, 0.62) !important;
+            box-shadow: 0 0 0 2px rgba(255, 181, 28, 0.16) !important;
+        }}
+        .block-container:has(.auth-marker) [data-testid="stFormSubmitButton"] button {{
+            background: #FFB51C !important;
+            color: #000000 !important;
+            border: 1px solid #FFB51C !important;
+            border-radius: 12px !important;
+            min-height: 56px;
+            margin-top: 14px;
+            font-size: 16px !important;
+            font-weight: 900 !important;
+            box-shadow: 0 16px 32px rgba(255, 181, 28, 0.22) !important;
+        }}
+        .block-container:has(.auth-marker) [data-testid="stCheckbox"] label,
+        .block-container:has(.auth-marker) [data-testid="stCheckbox"] p {{
+            color: #EDEDED !important;
+            font-size: 15px !important;
+        }}
+        .auth-switch {{
+            text-align: center;
+            color: #D6D6D6 !important;
+            margin-top: 26px;
+            font-size: 16px;
+        }}
+        .auth-switch span {{
+            color: #FFB51C;
+            font-weight: 800;
+        }}
+        .block-container:has(.auth-marker) [data-testid="stButton"] button {{
+            background: transparent !important;
+            border: 0 !important;
+            color: #FFB51C !important;
+            box-shadow: none !important;
+            font-size: 16px !important;
+            font-weight: 850 !important;
+            min-height: 28px;
+            padding: 0 !important;
+        }}
+        @media (max-width: 920px) {{
+            .block-container:has(.auth-marker) {{
+                padding: 18px 0 !important;
+            }}
+            .block-container:has(.auth-marker) [data-testid="stHorizontalBlock"] {{
+                width: min(94vw, 620px);
+                min-height: 0;
+                padding: 10px;
+                border-radius: 28px;
+            }}
+            .block-container:has(.auth-marker) [data-testid="column"] {{
+                min-height: auto;
+            }}
+            .block-container:has(.auth-marker) [data-testid="column"]:nth-child(2) > div {{
+                width: 92%;
+                padding: 28px 0 18px;
+            }}
+            .auth-visual {{
+                min-height: 360px;
+                border-radius: 22px;
+            }}
+            .auth-visual-copy strong {{
+                font-size: 34px;
+            }}
+            .auth-form-card {{
+                padding: 20px;
+            }}
+            .auth-heading-wrap {{
+                margin-bottom: 24px;
+            }}
+        }}
         div[data-testid="stDataFrame"] {{
             border: 1px solid {CHART_COLORS["border"]};
             border-radius: 8px;
@@ -153,6 +650,192 @@ def inject_css() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def initialize_auth_state() -> None:
+    """Initialize Streamlit authentication session state."""
+    st.session_state.setdefault("auth_mode", "login")
+    st.session_state.setdefault("auth_view", "home")
+    st.session_state.setdefault("authenticated", False)
+    st.session_state.setdefault("user", None)
+
+
+def switch_auth_mode(mode: str) -> None:
+    """Switch between login and signup modes."""
+    st.session_state.auth_mode = mode
+    st.session_state.auth_view = "auth"
+
+
+def show_auth_page(mode: str) -> None:
+    """Open the authentication page in a chosen mode."""
+    st.session_state.auth_mode = mode
+    st.session_state.auth_view = "auth"
+
+
+def show_public_home() -> None:
+    """Return unauthenticated users to the public home page."""
+    st.session_state.auth_view = "home"
+    st.session_state.auth_mode = "login"
+    st.query_params.clear()
+
+
+def sync_auth_view_from_url() -> None:
+    """Open authentication view when the public website URL asks for it."""
+    requested_auth = st.query_params.get("auth")
+    if (
+        not st.session_state.authenticated
+        and st.session_state.auth_view == "home"
+        and requested_auth in {"login", "signup"}
+    ):
+        st.session_state.auth_mode = requested_auth
+        st.session_state.auth_view = "auth"
+
+
+def logout() -> None:
+    """Clear the authenticated session."""
+    st.session_state.authenticated = False
+    st.session_state.user = None
+    st.session_state.auth_mode = "login"
+    st.session_state.auth_view = "home"
+    st.query_params.clear()
+    st.rerun()
+
+
+def render_public_home() -> None:
+    """Render the public website home screen before authentication."""
+    image_uri = image_to_data_uri(HOME_IMAGE_PATH) if HOME_IMAGE_PATH.exists() else ""
+    logo_uri = image_to_data_uri(LOGO_PATH) if LOGO_PATH.exists() else ""
+
+    st.markdown(
+        f"""
+        <div class="home-marker"></div>
+        <div class="public-site">
+            <nav class="public-nav">
+                <div class="public-brand">
+                    {'<img src="' + logo_uri + '" alt="' + BRAND_NAME + ' logo" />' if logo_uri else ''}
+                    <span>{BRAND_NAME}</span>
+                </div>
+                <div class="public-nav-right">
+                    <div class="public-nav-copy">Modern NSE portfolio intelligence dashboard</div>
+                    <div class="public-nav-actions">
+                        <a class="public-login" href="?auth=login" target="_self">Login</a>
+                        <a class="public-signup" href="?auth=signup" target="_self">Sign up</a>
+                    </div>
+                </div>
+            </nav>
+            <section class="public-hero">
+                <div>
+                    <div class="public-eyebrow">NSE portfolio optimizer</div>
+                    <div class="public-title">
+                        Build smarter portfolios with <span>{BRAND_NAME}</span>
+                    </div>
+                    <div class="public-subtitle">
+                        Analyze Indian NSE stocks using Modern Portfolio Theory, Efficient Frontier
+                        optimization, backtesting, risk analytics, and research-friendly dashboard views.
+                    </div>
+                    <div class="public-cta-row">
+                        <a class="public-primary" href="?auth=signup" target="_self">Start free</a>
+                        <a class="public-secondary" href="?auth=login" target="_self">Login to dashboard</a>
+                    </div>
+                    <div class="public-feature-row">
+                        <div class="public-feature">
+                            <strong>Optimize</strong>
+                            <span>Maximum Sharpe and minimum volatility allocation workflows.</span>
+                        </div>
+                        <div class="public-feature">
+                            <strong>Measure Risk</strong>
+                            <span>Volatility, drawdown, VaR, CVaR, beta, and tracking metrics.</span>
+                        </div>
+                        <div class="public-feature">
+                            <strong>Present</strong>
+                            <span>Clean Streamlit dashboard for GitHub, college demos, and reports.</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="public-visual" style="background-image:
+                    linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.45)),
+                    url('{image_uri}');">
+                    <div class="public-stat-strip">
+                        <div class="public-stat"><strong>50</strong><span>NSE stocks</span></div>
+                        <div class="public-stat"><strong>MPT</strong><span>Optimization model</span></div>
+                        <div class="public-stat"><strong>Risk</strong><span>Advanced analytics</span></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_auth_page() -> None:
+    """Render MongoDB-backed login and signup page."""
+    initialize_auth_state()
+    mode = st.session_state.auth_mode
+    is_signup = mode == "signup"
+    image_uri = image_to_data_uri(AUTH_IMAGE_PATH) if AUTH_IMAGE_PATH.exists() else ""
+
+    st.markdown('<div class="auth-marker"></div>', unsafe_allow_html=True)
+    visual_col, form_col = st.columns([1.0, 1.0], gap="large")
+
+    with visual_col:
+        st.markdown(
+            f"""
+            <div class="auth-visual" role="img" aria-label="{BRAND_NAME} authentication visual">
+                <img src="{image_uri}" alt="{BRAND_NAME} authentication page" />
+                <div class="auth-visual-copy">
+                    <span>NSE intelligence workspace</span>
+                    <strong>Build disciplined portfolios with {BRAND_NAME}</strong>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with form_col:
+        st.markdown(
+            f"""
+            <div class="auth-heading-wrap">
+            <div class="auth-title">{'Create account' if is_signup else 'Login'}</div>
+            <div class="auth-subtitle">
+                {'Start your portfolio intelligence workspace' if is_signup else 'Enter your credentials to access your account'}
+            </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        with st.form("signup_form" if is_signup else "login_form", clear_on_submit=False):
+            name = ""
+            if is_signup:
+                name = st.text_input("Full name", placeholder="Shaleen Singh")
+            email = st.text_input("Email", placeholder="you@example.com")
+            password = st.text_input("Password", type="password", placeholder="Minimum 8 characters")
+            remember = st.checkbox("Remember me", value=True)
+            submitted = st.form_submit_button(
+                "Create account" if is_signup else "Login",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if submitted:
+            with st.spinner("Checking credentials..."):
+                result = create_user(name, email, password) if is_signup else authenticate_user(email, password)
+            if result.success:
+                st.session_state.authenticated = True
+                st.session_state.user = result.user
+                st.session_state.remember_me = remember
+                st.success(result.message)
+                st.rerun()
+            else:
+                st.error(result.message)
+
+        if is_signup:
+            st.markdown('<div class="auth-switch">Already a member?</div>', unsafe_allow_html=True)
+            st.button("Login instead", use_container_width=True, on_click=switch_auth_mode, args=("login",))
+        else:
+            st.markdown('<div class="auth-switch">Not a member? <span>Create an account</span></div>', unsafe_allow_html=True)
+            st.button("Create an account", use_container_width=True, on_click=switch_auth_mode, args=("signup",))
 
 
 def metric_card(label: str, value: str, signed_value: float | None = None) -> None:
@@ -244,7 +927,21 @@ def sidebar_inputs() -> tuple[list[str], date, date, bool, int, int, float, floa
     """Collect sidebar settings."""
     if LOGO_PATH.exists():
         st.sidebar.image(str(LOGO_PATH), use_container_width=True)
-    st.sidebar.title(BRAND_NAME)
+    user = st.session_state.get("user") or {}
+    st.sidebar.markdown(f"## {BRAND_NAME}")
+    st.sidebar.markdown(
+        f"""
+        <div class="info-card">
+            <strong>{user.get('name') or 'NiveshMatrix User'}</strong>
+            <div class="small-muted">{user.get('email') or 'Authenticated session'}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.sidebar.button("Logout", use_container_width=True):
+        logout()
+
+    st.sidebar.markdown("### Portfolio Controls")
 
     selected_tickers = st.sidebar.multiselect(
         "NSE stock universe",
@@ -301,6 +998,15 @@ def main() -> None:
     """Run the Streamlit dashboard."""
     ensure_project_folders()
     inject_css()
+    initialize_auth_state()
+    sync_auth_view_from_url()
+
+    if not st.session_state.authenticated and st.session_state.auth_view == "auth":
+        render_auth_page()
+        st.stop()
+    if not st.session_state.authenticated:
+        render_public_home()
+        st.stop()
 
     (
         selected_tickers,
