@@ -912,8 +912,8 @@ The project can be improved in the following ways:
 6. **Live portfolio tracking**  
    Allow users to enter holdings and track current portfolio value.
 
-7. **User login and saved portfolios**  
-   Add authentication so users can save and compare portfolios.
+7. **Saved local scenario templates**
+   Allow visitors to store and compare portfolio scenarios without account setup.
 
 8. **More advanced machine learning models**  
    Test regularized regression, gradient boosting, and time-series models.
@@ -959,4 +959,3 @@ The project does not guarantee profit and should not be treated as investment ad
 This project is created for educational and academic purposes only. It uses historical stock market data and mathematical models to demonstrate portfolio optimization concepts. Historical performance does not guarantee future results.
 
 The project does not provide investment, trading, tax, or financial advice. The portfolio outputs, optimized weights, risk metrics, machine learning predictions, and dashboard results should be treated as learning material only. Any real investment decision should be made only after consulting a qualified financial advisor and considering personal financial goals, risk tolerance, taxes, transaction costs, and regulatory requirements.
-

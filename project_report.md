@@ -179,7 +179,7 @@ The results depend on selected stocks, date range, risk-free rate, transaction c
 - Tax-aware optimization.
 - ESG, spiritual, and ethical investing filters.
 - Live portfolio tracking.
-- User login and saved portfolios.
+- Saved local scenario templates.
 - More advanced ML models.
 - PDF export.
 

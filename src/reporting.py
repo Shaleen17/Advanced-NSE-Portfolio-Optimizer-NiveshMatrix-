@@ -98,7 +98,7 @@ def future_scope_items() -> list[str]:
         "Tax-aware optimization.",
         "ESG, spiritual, and ethical investing filters.",
         "Live portfolio tracking.",
-        "User login and saved portfolios.",
+        "Saved local scenario templates.",
         "More advanced ML and time-series forecasting models.",
         "PDF report export from the dashboard.",
     ]
