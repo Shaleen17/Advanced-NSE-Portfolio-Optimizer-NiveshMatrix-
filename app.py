@@ -85,12 +85,46 @@ def inject_css() -> None:
     st.markdown(
         f"""
         <style>
-        #MainMenu, footer, [data-testid="stToolbar"], .stDeployButton {{
+        #MainMenu, footer, .stDeployButton {{
             display: none !important;
             visibility: hidden !important;
         }}
+        header[data-testid="stHeader"] {{
+            background: rgba(0, 0, 0, 0.72) !important;
+            backdrop-filter: blur(14px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }}
+        [data-testid="collapsedControl"] {{
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            position: fixed !important;
+            top: 12px !important;
+            left: 12px !important;
+            z-index: 999999 !important;
+        }}
+        [data-testid="collapsedControl"] button,
+        [data-testid="stSidebarCollapseButton"] button,
+        button[aria-label="Open sidebar"],
+        button[aria-label="Close sidebar"] {{
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 42px !important;
+            height: 42px !important;
+            min-width: 42px !important;
+            min-height: 42px !important;
+            color: #000000 !important;
+            background: #FFB51C !important;
+            border: 1px solid rgba(255, 211, 106, 0.95) !important;
+            border-radius: 8px !important;
+            box-shadow: 0 12px 28px rgba(255, 181, 28, 0.22) !important;
+        }}
         .stApp {{
-            background: {CHART_COLORS["background"]};
+            background:
+                radial-gradient(circle at 80% 0%, rgba(255, 181, 28, 0.08), transparent 22%),
+                radial-gradient(circle at 0% 24%, rgba(255, 0, 51, 0.10), transparent 24%),
+                {CHART_COLORS["background"]};
             color: {CHART_COLORS["text"]};
         }}
         [data-testid="stSidebar"] {{
@@ -99,6 +133,9 @@ def inject_css() -> None:
                 linear-gradient(180deg, #000000 0%, #090000 45%, #160006 100%);
             border-right: 1px solid rgba(255, 255, 255, 0.10);
             box-shadow: 18px 0 40px rgba(255, 0, 45, 0.10);
+        }}
+        [data-testid="stSidebar"] > div:first-child {{
+            padding-top: 18px;
         }}
         [data-testid="stSidebar"] img {{
             max-width: 160px;
@@ -139,40 +176,53 @@ def inject_css() -> None:
             border: 1px solid rgba(255, 0, 45, 0.65) !important;
             color: #FFFFFF !important;
         }}
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h3 {{
+            margin-top: 18px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(255, 255, 255, 0.10);
+        }}
         h1, h2, h3, h4, h5, h6, p, span, div, label {{
             color: {CHART_COLORS["text"]};
         }}
         .block-container {{
-            padding-top: 1.5rem;
-            max-width: 1400px;
+            padding-top: 4.25rem;
+            padding-left: 2rem;
+            padding-right: 2rem;
+            max-width: 1480px;
         }}
         .hero {{
-            background: linear-gradient(135deg, #000000 0%, #101010 100%);
-            border: 1px solid {CHART_COLORS["border"]};
+            background:
+                linear-gradient(135deg, rgba(255, 181, 28, 0.10) 0%, rgba(255, 0, 51, 0.04) 42%, #070707 100%);
+            border: 1px solid rgba(255, 255, 255, 0.10);
             border-radius: 8px;
-            padding: 22px;
-            margin-bottom: 18px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
         }}
         .hero-title {{
-            font-size: 34px;
+            font-size: 36px;
             font-weight: 800;
             line-height: 1.15;
         }}
         .hero-subtitle {{
             color: {CHART_COLORS["muted"]};
-            font-size: 15px;
+            font-size: 16px;
+            line-height: 1.55;
             margin-top: 8px;
+            max-width: 960px;
         }}
         .metric-card {{
-            background: {CHART_COLORS["panel"]};
-            border: 1px solid {CHART_COLORS["border"]};
+            background: linear-gradient(180deg, #141414 0%, #0B0B0B 100%);
+            border: 1px solid rgba(255, 255, 255, 0.10);
             border-radius: 8px;
-            padding: 16px;
-            min-height: 98px;
+            padding: 18px;
+            min-height: 108px;
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
         }}
         .metric-label {{
             color: {CHART_COLORS["muted"]};
             font-size: 13px;
+            line-height: 1.35;
         }}
         .metric-value {{
             font-size: 25px;
@@ -186,15 +236,100 @@ def inject_css() -> None:
             color: {CHART_COLORS["loss"]};
         }}
         .info-card {{
-            background: {CHART_COLORS["panel_2"]};
-            border: 1px solid {CHART_COLORS["border"]};
+            background: linear-gradient(180deg, #171717 0%, #101010 100%);
+            border: 1px solid rgba(255, 255, 255, 0.10);
             border-radius: 8px;
             padding: 16px;
             margin-bottom: 12px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.20);
         }}
         .small-muted {{
             color: {CHART_COLORS["muted"]};
             font-size: 13px;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }}
+        div[data-testid="stTabs"] [role="tablist"] {{
+            gap: 8px;
+            overflow-x: auto;
+            padding: 0 0 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+            scrollbar-width: thin;
+        }}
+        div[data-testid="stTabs"] [role="tab"] {{
+            min-height: 42px;
+            background: #111111;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 8px;
+            padding: 0 14px;
+            color: #EDEDED !important;
+            flex: 0 0 auto;
+        }}
+        div[data-testid="stTabs"] [role="tab"][aria-selected="true"] {{
+            background: #FFB51C;
+            color: #000000 !important;
+            border-color: #FFB51C;
+        }}
+        div[data-testid="stTabs"] [role="tabpanel"] {{
+            padding-top: 18px;
+        }}
+        .stButton button,
+        .stDownloadButton button {{
+            border-radius: 8px !important;
+            min-height: 42px;
+            font-weight: 750 !important;
+        }}
+        .stSelectbox div[data-baseweb="select"],
+        .stMultiSelect div[data-baseweb="select"],
+        .stDateInput input,
+        .stNumberInput input,
+        .stTextInput input {{
+            border-radius: 8px !important;
+        }}
+        div[data-testid="stDataFrame"] {{
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            overflow: hidden;
+        }}
+        @media (max-width: 760px) {{
+            .block-container {{
+                padding-top: 4.75rem;
+                padding-left: 0.9rem;
+                padding-right: 0.9rem;
+            }}
+            [data-testid="collapsedControl"] {{
+                top: 10px !important;
+                left: 10px !important;
+            }}
+            [data-testid="collapsedControl"] button,
+            [data-testid="stSidebarCollapseButton"] button,
+            button[aria-label="Open sidebar"],
+            button[aria-label="Close sidebar"] {{
+                width: 44px !important;
+                height: 44px !important;
+                min-width: 44px !important;
+                min-height: 44px !important;
+            }}
+            .hero {{
+                padding: 18px;
+            }}
+            .hero-title {{
+                font-size: 28px;
+            }}
+            .hero-subtitle {{
+                font-size: 14px;
+            }}
+            .metric-card {{
+                min-height: 92px;
+                padding: 14px;
+            }}
+            .metric-value {{
+                font-size: 22px;
+            }}
+            div[data-testid="stTabs"] [role="tab"] {{
+                min-height: 40px;
+                padding: 0 12px;
+            }}
         }}
         .stApp:has(.home-marker) {{
             background:
@@ -290,7 +425,7 @@ def inject_css() -> None:
             margin-bottom: 20px;
         }}
         .public-title {{
-            font-size: clamp(52px, 5.4vw, 88px);
+            font-size: 76px;
             line-height: 1.04;
             font-weight: 900;
             max-width: 780px;
@@ -300,7 +435,7 @@ def inject_css() -> None:
         }}
         .public-subtitle {{
             color: #D7D7D7 !important;
-            font-size: clamp(18px, 1.6vw, 24px);
+            font-size: 21px;
             line-height: 1.55;
             max-width: 690px;
             margin-top: 24px;
@@ -421,6 +556,12 @@ def inject_css() -> None:
                 min-height: 0;
                 padding-top: 34px;
             }}
+            .public-title {{
+                font-size: 48px;
+            }}
+            .public-subtitle {{
+                font-size: 17px;
+            }}
             .public-feature-row {{
                 grid-template-columns: 1fr;
             }}
@@ -433,6 +574,47 @@ def inject_css() -> None:
             }}
             .public-stat-strip {{
                 grid-template-columns: 1fr;
+            }}
+        }}
+        @media (max-width: 560px) {{
+            .public-site {{
+                width: 92vw;
+                padding-bottom: 34px;
+            }}
+            .public-nav {{
+                flex-direction: column;
+                align-items: stretch;
+                gap: 16px;
+                padding-bottom: 18px;
+            }}
+            .public-brand {{
+                font-size: 21px;
+            }}
+            .public-brand img {{
+                width: 42px;
+                height: 42px;
+            }}
+            .public-nav-right,
+            .public-nav-actions {{
+                width: 100%;
+            }}
+            .public-nav-actions a {{
+                flex: 1 1 0;
+            }}
+            .public-title {{
+                font-size: 38px;
+            }}
+            .public-subtitle {{
+                font-size: 15px;
+            }}
+            .public-visual {{
+                min-height: 340px;
+                border-radius: 18px;
+            }}
+            .public-stat-strip {{
+                left: 16px;
+                right: 16px;
+                bottom: 16px;
             }}
         }}
         .stApp:has(.auth-marker) {{
@@ -501,8 +683,8 @@ def inject_css() -> None:
         }}
         .auth-visual-copy {{
             position: absolute;
-            left: clamp(26px, 4vw, 62px);
-            bottom: clamp(28px, 5vw, 72px);
+            left: 54px;
+            bottom: 62px;
             z-index: 2;
             max-width: 520px;
         }}
@@ -517,7 +699,7 @@ def inject_css() -> None:
         .auth-visual-copy strong {{
             display: block;
             color: #FFFFFF !important;
-            font-size: clamp(38px, 4vw, 58px);
+            font-size: 52px;
             line-height: 1.08;
             letter-spacing: 0;
         }}
@@ -528,7 +710,7 @@ def inject_css() -> None:
         .auth-title {{
             text-align: center;
             color: #F4F4F4 !important;
-            font-size: clamp(38px, 4vw, 58px);
+            font-size: 52px;
             font-weight: 850;
             line-height: 1.05;
             margin-bottom: 16px;
@@ -536,7 +718,7 @@ def inject_css() -> None:
         .auth-subtitle {{
             color: #D9D9D9 !important;
             text-align: center;
-            font-size: clamp(16px, 1.15vw, 20px);
+            font-size: 18px;
             line-height: 1.45;
         }}
         .auth-form-card {{
@@ -637,16 +819,54 @@ def inject_css() -> None:
             .auth-visual-copy strong {{
                 font-size: 34px;
             }}
+            .auth-visual-copy {{
+                left: 28px;
+                bottom: 32px;
+            }}
             .auth-form-card {{
                 padding: 20px;
             }}
             .auth-heading-wrap {{
                 margin-bottom: 24px;
             }}
+            .auth-title {{
+                font-size: 38px;
+            }}
+            .auth-subtitle {{
+                font-size: 15px;
+            }}
+        }}
+        @media (max-width: 640px) {{
+            .block-container:has(.auth-marker) {{
+                padding: 12px 0 !important;
+            }}
+            .block-container:has(.auth-marker) [data-testid="stHorizontalBlock"] {{
+                width: min(94vw, 480px);
+                padding: 8px;
+                border-radius: 22px;
+            }}
+            .block-container:has(.auth-marker) [data-testid="column"]:first-child {{
+                display: none;
+            }}
+            .block-container:has(.auth-marker) [data-testid="column"]:nth-child(2) > div {{
+                width: 92%;
+                padding: 24px 0;
+            }}
+            .block-container:has(.auth-marker) [data-testid="stForm"] {{
+                padding: 20px !important;
+            }}
+            .auth-title {{
+                font-size: 34px;
+            }}
+            .block-container:has(.auth-marker) [data-testid="stTextInput"] input {{
+                min-height: 50px;
+                font-size: 15px !important;
+            }}
         }}
         div[data-testid="stDataFrame"] {{
-            border: 1px solid {CHART_COLORS["border"]};
+            border: 1px solid rgba(255, 255, 255, 0.12);
             border-radius: 8px;
+            overflow: hidden;
         }}
         </style>
         """,
@@ -1045,6 +1265,7 @@ def render_hero() -> None:
     """Render the main dashboard heading."""
     st.markdown(
         f"""
+        <div class="dashboard-marker"></div>
         <div class="hero">
             <div class="hero-title">{PROJECT_NAME}</div>
             <div class="hero-subtitle">
