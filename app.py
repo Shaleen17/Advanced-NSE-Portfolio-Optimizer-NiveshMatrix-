@@ -22,7 +22,7 @@ from config import (
     RISK_FREE_RATE,
     ensure_project_folders,
 )
-from src.auth import authenticate_user, create_user, image_to_data_uri
+from src.auth import authenticate_user, create_user, image_to_data_uri, is_auth_configured
 from src.backtest import compare_backtest_to_equal_weight, run_monthly_rebalance_backtest
 from src.black_litterman import black_litterman_allocation
 from src.data_loader import DataLoadError, get_benchmark_returns, get_price_data
@@ -658,7 +658,20 @@ def initialize_auth_state() -> None:
     st.session_state.setdefault("auth_mode", "login")
     st.session_state.setdefault("auth_view", "home")
     st.session_state.setdefault("authenticated", False)
+    st.session_state.setdefault("auth_demo_mode", False)
     st.session_state.setdefault("user", None)
+
+
+def enable_public_demo_session() -> None:
+    """Open the dashboard when deployed without MongoDB secrets."""
+    st.session_state.authenticated = True
+    st.session_state.auth_demo_mode = True
+    st.session_state.auth_view = "dashboard"
+    st.session_state.user = {
+        "id": "public-demo",
+        "name": "Public Demo",
+        "email": "MongoDB auth not configured",
+    }
 
 
 def switch_auth_mode(mode: str) -> None:
@@ -695,6 +708,7 @@ def sync_auth_view_from_url() -> None:
 def logout() -> None:
     """Clear the authenticated session."""
     st.session_state.authenticated = False
+    st.session_state.auth_demo_mode = False
     st.session_state.user = None
     st.session_state.auth_mode = "login"
     st.session_state.auth_view = "home"
@@ -964,7 +978,9 @@ def sidebar_inputs() -> tuple[list[str], date, date, bool, int, int, float, floa
         """,
         unsafe_allow_html=True,
     )
-    if st.sidebar.button("Logout", width="stretch"):
+    if st.session_state.get("auth_demo_mode"):
+        st.sidebar.caption("Public demo mode")
+    elif st.sidebar.button("Logout", width="stretch"):
         logout()
 
     st.sidebar.markdown("### Portfolio Controls")
@@ -1026,6 +1042,9 @@ def main() -> None:
     inject_css()
     initialize_auth_state()
     sync_auth_view_from_url()
+
+    if not st.session_state.authenticated and not is_auth_configured():
+        enable_public_demo_session()
 
     if not st.session_state.authenticated and st.session_state.auth_view == "auth":
         render_auth_page()

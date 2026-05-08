@@ -301,7 +301,9 @@ The app uses MongoDB for real login and signup. Keep credentials out of GitHub.
 1. Copy `.streamlit/secrets.example.toml` to `.streamlit/secrets.toml`.
 2. Add your MongoDB Atlas connection string in `.streamlit/secrets.toml`.
 3. Keep `.streamlit/secrets.toml` private. It is ignored by Git.
-4. For Streamlit Cloud, add the same `[mongo]` values in the app secrets settings.
+4. For Streamlit Cloud, manually paste the same `[mongo]` values into the app's **Settings > Secrets** panel. The local secrets file is intentionally not deployed.
+
+If MongoDB secrets are not configured in deployment, the app opens the dashboard in public demo mode instead of blocking users on the login screen. Add the `[mongo]` secrets when you want real login and signup.
 
 ## Deploy On Streamlit Cloud
 
@@ -317,7 +319,7 @@ app.py
 ```
 
 7. Confirm that `requirements.txt` is in the repository root.
-8. Add the MongoDB `[mongo]` values in **Secrets**.
+8. Add the MongoDB `[mongo]` values in **Settings > Secrets** before opening the deployed app.
 9. Start the deployment.
 
 ## Final Conclusion

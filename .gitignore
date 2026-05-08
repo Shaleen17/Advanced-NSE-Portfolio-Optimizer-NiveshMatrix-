@@ -29,6 +29,7 @@ Thumbs.db
 !.env.example
 .streamlit/secrets.toml
 .streamlit/secrets.*.toml
+!.streamlit/secrets.example.toml
 
 # Jupyter checkpoints
 .ipynb_checkpoints/

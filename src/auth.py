@@ -18,6 +18,10 @@ from pymongo.errors import DuplicateKeyError, PyMongoError, ServerSelectionTimeo
 
 
 PBKDF2_ITERATIONS = 210_000
+AUTH_CONFIG_HELP = (
+    "Authentication is not configured. In Streamlit Cloud, open App settings > "
+    "Secrets and add a [mongo] section with uri, database, and users_collection."
+)
 
 
 @dataclass
@@ -44,26 +48,48 @@ def _secret_value(*keys: str, default: str | None = None) -> str | None:
         return default
 
 
+def _first_config_value(*names: str) -> str | None:
+    """Return the first configured Streamlit secret or environment variable."""
+    for name in names:
+        value = _secret_value(name) or os.getenv(name)
+        if value:
+            return value
+    return None
+
+
 def get_mongo_settings() -> tuple[str, str, str]:
     """Return MongoDB URI, database name, and collection name."""
     uri = (
         _secret_value("mongo", "uri")
-        or _secret_value("MONGODB_URI")
-        or os.getenv("MONGODB_URI")
+        or _first_config_value("MONGODB_URI", "MONGO_URI", "MONGO_URL")
     )
     database = (
         _secret_value("mongo", "database")
-        or os.getenv("MONGODB_DATABASE")
+        or _first_config_value("MONGODB_DATABASE", "MONGO_DATABASE", "MONGO_DB")
         or "niveshmatrix"
     )
     users_collection = (
         _secret_value("mongo", "users_collection")
-        or os.getenv("MONGODB_USERS_COLLECTION")
+        or _first_config_value(
+            "MONGODB_USERS_COLLECTION",
+            "MONGO_USERS_COLLECTION",
+            "MONGODB_COLLECTION",
+            "MONGO_COLLECTION",
+        )
         or "users"
     )
     if not uri:
         raise AuthConfigError("MongoDB URI is not configured.")
     return uri, database, users_collection
+
+
+def is_auth_configured() -> bool:
+    """Return whether MongoDB authentication settings are available."""
+    try:
+        get_mongo_settings()
+        return True
+    except AuthConfigError:
+        return False
 
 
 @st.cache_resource(show_spinner=False)
@@ -135,10 +161,7 @@ def create_user(name: str, email: str, password: str) -> AuthResult:
         document["_id"] = result.inserted_id
         return AuthResult(True, "Account created successfully.", sanitize_user(document))
     except AuthConfigError:
-        return AuthResult(
-            False,
-            "Authentication is not configured. Add MongoDB settings in Streamlit app secrets.",
-        )
+        return AuthResult(False, AUTH_CONFIG_HELP)
     except DuplicateKeyError:
         return AuthResult(False, "An account with this email already exists.")
     except (ServerSelectionTimeoutError, PyMongoError):
@@ -172,10 +195,7 @@ def authenticate_user(email: str, password: str) -> AuthResult:
         user["last_login_at"] = datetime.now(timezone.utc)
         return AuthResult(True, "Login successful.", sanitize_user(user))
     except AuthConfigError:
-        return AuthResult(
-            False,
-            "Authentication is not configured. Add MongoDB settings in Streamlit app secrets.",
-        )
+        return AuthResult(False, AUTH_CONFIG_HELP)
     except (ServerSelectionTimeoutError, PyMongoError):
         return AuthResult(
             False,
