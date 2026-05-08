@@ -370,18 +370,42 @@ def info_card(title: str, body: str) -> None:
     )
 
 
+def safe_float(value, digits: int = 2, suffix: str = "") -> str:
+    """Format numeric values without crashing on missing provider data."""
+    try:
+        if value is None:
+            return "N/A"
+        if isinstance(value, str) and not value.strip():
+            return "N/A"
+        if pd.isna(value):
+            return "N/A"
+        return f"{float(value):,.{digits}f}{suffix}"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+def safe_percent(value, digits: int = 2) -> str:
+    """Format percentage values without crashing on missing provider data."""
+    try:
+        if value is None:
+            return "N/A"
+        if isinstance(value, str) and not value.strip():
+            return "N/A"
+        if pd.isna(value):
+            return "N/A"
+        return f"{float(value):,.{digits}%}"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
 def format_percent(value: float) -> str:
     """Format a float as a percentage."""
-    if pd.isna(value):
-        return "N/A"
-    return f"{value:.2%}"
+    return safe_percent(value)
 
 
 def format_number(value: float) -> str:
     """Format a float with four decimals."""
-    if pd.isna(value):
-        return "N/A"
-    return f"{value:.4f}"
+    return safe_float(value, digits=4)
 
 
 def style_numeric_table(
@@ -392,8 +416,18 @@ def style_numeric_table(
     """Style numeric tables with green positives and red negatives."""
     percent_columns = percent_columns or []
     number_columns = number_columns or []
-    formatters = {column: "{:.2%}" for column in percent_columns if column in dataframe.columns}
-    formatters.update({column: "{:.4f}" for column in number_columns if column in dataframe.columns})
+    formatters = {
+        column: safe_percent
+        for column in percent_columns
+        if column in dataframe.columns
+    }
+    formatters.update(
+        {
+            column: lambda value: safe_float(value, digits=4)
+            for column in number_columns
+            if column in dataframe.columns
+        }
+    )
 
     def color_signed(value):
         if isinstance(value, (int, float, np.number)) and not pd.isna(value):
@@ -893,17 +927,43 @@ def main() -> None:
                 st.warning("No quote data was returned by the configured providers.")
             else:
                 live_quotes = live_quotes.copy()
+                numeric_quote_columns = [
+                    "Price",
+                    "Previous Close",
+                    "Change",
+                    "Change %",
+                    "Open",
+                    "High",
+                    "Low",
+                    "Volume",
+                ]
+                for column in numeric_quote_columns:
+                    if column in live_quotes.columns:
+                        live_quotes[column] = pd.to_numeric(live_quotes[column], errors="coerce")
                 last_prices = prices.iloc[-1].reindex(live_quotes["Ticker"]).reset_index(drop=True)
                 live_quotes["Latest Historical Close"] = last_prices
-                live_quotes["Gap vs Historical Close %"] = (
-                    live_quotes["Price"] / live_quotes["Latest Historical Close"] - 1
+                live_quotes["Latest Historical Close"] = pd.to_numeric(
+                    live_quotes["Latest Historical Close"],
+                    errors="coerce",
+                )
+                live_quotes["Gap vs Historical Close %"] = np.where(
+                    live_quotes["Price"].notna()
+                    & live_quotes["Latest Historical Close"].notna()
+                    & (live_quotes["Latest Historical Close"] != 0),
+                    live_quotes["Price"] / live_quotes["Latest Historical Close"] - 1,
+                    np.nan,
                 )
                 live_quotes["Quote Available"] = live_quotes["Price"].notna()
 
                 available_count = int(live_quotes["Quote Available"].sum())
-                provider_count = live_quotes.loc[live_quotes["Quote Available"], "Provider"].nunique()
+                available_provider_names = (
+                    live_quotes.loc[live_quotes["Quote Available"], "Provider"]
+                    .dropna()
+                    .astype(str)
+                )
+                provider_count = available_provider_names.nunique()
                 provider_text = ", ".join(
-                    live_quotes.loc[live_quotes["Quote Available"], "Provider"].dropna().unique().tolist()
+                    available_provider_names.unique().tolist()
                 )
 
                 live_cards = st.columns(4)
@@ -928,9 +988,22 @@ def main() -> None:
 
                 st.caption(
                     "Source used: "
-                    + (provider_text or "None")
+                    + (provider_text or "No live provider returned usable quotes")
                     + ". Cached for 60 seconds to protect free API limits."
                 )
+                if available_count == 0:
+                    provider_notes = (
+                        live_quotes.get("Provider Notes", pd.Series(dtype=str))
+                        .dropna()
+                        .astype(str)
+                    )
+                    note_text = "; ".join(
+                        note for note in provider_notes.unique().tolist() if note
+                    )
+                    st.warning(
+                        "Configured providers did not return usable live prices for the selected symbols."
+                        + (f" Provider notes: {note_text}" if note_text else "")
+                    )
                 st.dataframe(
                     style_numeric_table(
                         live_quotes,
@@ -943,6 +1016,7 @@ def main() -> None:
                             "High",
                             "Low",
                             "Latest Historical Close",
+                            "Volume",
                         ],
                     ),
                     width="stretch",
