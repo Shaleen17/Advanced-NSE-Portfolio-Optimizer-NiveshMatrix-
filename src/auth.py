@@ -10,11 +10,21 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import streamlit as st
-from pymongo import ASCENDING, MongoClient
-from pymongo.collection import Collection
-from pymongo.errors import DuplicateKeyError, PyMongoError, ServerSelectionTimeoutError
+
+try:
+    from pymongo import ASCENDING, MongoClient
+    from pymongo.collection import Collection
+    from pymongo.errors import DuplicateKeyError, PyMongoError, ServerSelectionTimeoutError
+except ImportError:
+    ASCENDING = 1
+    MongoClient = None
+    Collection = Any
+    DuplicateKeyError = RuntimeError
+    PyMongoError = RuntimeError
+    ServerSelectionTimeoutError = RuntimeError
 
 
 PBKDF2_ITERATIONS = 210_000
@@ -95,6 +105,8 @@ def is_auth_configured() -> bool:
 @st.cache_resource(show_spinner=False)
 def get_users_collection() -> Collection:
     """Connect to MongoDB and return the users collection."""
+    if MongoClient is None:
+        raise AuthConfigError("PyMongo is not installed.")
     uri, database_name, collection_name = get_mongo_settings()
     client = MongoClient(uri, serverSelectionTimeoutMS=7000)
     client.admin.command("ping")

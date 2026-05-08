@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import date
 
 import numpy as np
@@ -22,7 +23,7 @@ from config import (
     RISK_FREE_RATE,
     ensure_project_folders,
 )
-from src.auth import authenticate_user, create_user, image_to_data_uri, is_auth_configured
+from src.auth import authenticate_user, create_user, image_to_data_uri
 from src.backtest import compare_backtest_to_equal_weight, run_monthly_rebalance_backtest
 from src.black_litterman import black_litterman_allocation
 from src.data_loader import DataLoadError, get_benchmark_returns, get_price_data
@@ -662,6 +663,28 @@ def initialize_auth_state() -> None:
     st.session_state.setdefault("user", None)
 
 
+def _secret_value(*keys: str) -> str | None:
+    """Read nested Streamlit secrets without crashing when secrets are absent."""
+    current = st.secrets
+    try:
+        for key in keys:
+            current = current[key]
+        return str(current)
+    except Exception:
+        return None
+
+
+def auth_configured_for_deployment() -> bool:
+    """Return whether the app has enough config to attempt MongoDB auth."""
+    return bool(
+        _secret_value("mongo", "uri")
+        or _secret_value("MONGODB_URI")
+        or os.getenv("MONGODB_URI")
+        or os.getenv("MONGO_URI")
+        or os.getenv("MONGO_URL")
+    )
+
+
 def enable_public_demo_session() -> None:
     """Open the dashboard when deployed without MongoDB secrets."""
     st.session_state.authenticated = True
@@ -1043,7 +1066,7 @@ def main() -> None:
     initialize_auth_state()
     sync_auth_view_from_url()
 
-    if not st.session_state.authenticated and not is_auth_configured():
+    if not st.session_state.authenticated and not auth_configured_for_deployment():
         enable_public_demo_session()
 
     if not st.session_state.authenticated and st.session_state.auth_view == "auth":
