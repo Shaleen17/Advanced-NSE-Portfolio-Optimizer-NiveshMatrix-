@@ -184,3 +184,64 @@ def ml_prediction_chart(predictions: pd.DataFrame) -> plt.Figure:
     ax.tick_params(axis="x", rotation=45)
     fig.tight_layout()
     return fig
+
+
+def live_top_movers_chart(live_quotes: pd.DataFrame, gainers: bool = True, limit: int = 8) -> plt.Figure:
+    """Plot top live gainers or losers by Change %."""
+    frame = live_quotes.dropna(subset=["Change %"]).copy()
+    if gainers:
+        frame = frame[frame["Change %"] > 0].sort_values("Change %", ascending=False).head(limit)
+        title = "Top Live Gainers"
+        color = CHART_COLORS["profit"]
+    else:
+        frame = frame[frame["Change %"] < 0].sort_values("Change %", ascending=True).head(limit)
+        title = "Top Live Losers"
+        color = CHART_COLORS["loss"]
+    fig, ax = plt.subplots(figsize=(10, 4.5))
+    if not frame.empty:
+        ax.bar(frame["Ticker"], frame["Change %"], color=color)
+    apply_chart_theme(ax, title)
+    ax.set_ylabel("Change %")
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
+    return fig
+
+
+def live_volume_leaders_chart(live_quotes: pd.DataFrame, limit: int = 10) -> plt.Figure:
+    """Plot highest-volume live symbols."""
+    frame = live_quotes.dropna(subset=["Volume"]).sort_values("Volume", ascending=False).head(limit)
+    fig, ax = plt.subplots(figsize=(10, 4.5))
+    if not frame.empty:
+        ax.bar(frame["Ticker"], frame["Volume"], color=CHART_COLORS["profit"])
+    apply_chart_theme(ax, "Live Volume Leaders")
+    ax.set_ylabel("Volume")
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
+    return fig
+
+
+def live_change_distribution_chart(live_quotes: pd.DataFrame) -> plt.Figure:
+    """Plot distribution of live Change % values."""
+    returns = pd.to_numeric(live_quotes.get("Change %", pd.Series(dtype=float)), errors="coerce").dropna()
+    fig, ax = plt.subplots(figsize=(10, 4.5))
+    if not returns.empty:
+        ax.hist(returns, bins=min(20, max(5, len(returns))), color=CHART_COLORS["profit"], alpha=0.72)
+        ax.axvline(0, color=CHART_COLORS["loss"], linewidth=1.5)
+    apply_chart_theme(ax, "Live Change % Distribution")
+    ax.set_xlabel("Change %")
+    ax.set_ylabel("Symbols")
+    fig.tight_layout()
+    return fig
+
+
+def live_breadth_chart(advancers: int, decliners: int, unchanged: int) -> plt.Figure:
+    """Plot market breadth as a simple dark-theme bar chart."""
+    labels = ["Advancers", "Decliners", "Unchanged"]
+    values = [advancers, decliners, unchanged]
+    colors = [CHART_COLORS["profit"], CHART_COLORS["loss"], CHART_COLORS["muted"]]
+    fig, ax = plt.subplots(figsize=(8, 4.2))
+    ax.bar(labels, values, color=colors)
+    apply_chart_theme(ax, "Advancers vs Decliners")
+    ax.set_ylabel("Symbols")
+    fig.tight_layout()
+    return fig

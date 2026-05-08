@@ -14,12 +14,14 @@ ASSETS_DIR = BASE_DIR / "assets"
 DATA_DIR = BASE_DIR / "data"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 OUTPUT_DATA_DIR = DATA_DIR / "outputs"
+CACHE_DATA_DIR = DATA_DIR / "cache"
 REPORTS_DIR = BASE_DIR / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 MPL_CONFIG_DIR = BASE_DIR / ".matplotlib"
 LOGO_PATH = ASSETS_DIR / "Brand_Logo.png"
 CLEANED_PRICE_FILE = PROCESSED_DATA_DIR / "nse_adjusted_close_cleaned.csv"
 BENCHMARK_RETURNS_FILE = OUTPUT_DATA_DIR / "nifty50_benchmark_returns.csv"
+LIVE_QUOTES_CACHE_FILE = CACHE_DATA_DIR / "live_quotes_latest.csv"
 
 os.environ.setdefault("MPLCONFIGDIR", str(MPL_CONFIG_DIR))
 
@@ -100,6 +102,7 @@ def ensure_project_folders() -> None:
     for folder in [
         ASSETS_DIR,
         DATA_DIR,
+        CACHE_DATA_DIR,
         PROCESSED_DATA_DIR,
         OUTPUT_DATA_DIR,
         REPORTS_DIR,
