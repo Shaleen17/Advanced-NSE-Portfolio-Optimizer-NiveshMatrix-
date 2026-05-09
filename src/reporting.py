@@ -34,7 +34,7 @@ def project_file_purpose() -> pd.DataFrame:
         ("src/backtest.py", "Runs monthly rebalancing backtest with transaction cost assumption."),
         ("src/black_litterman.py", "Implements an educational Black-Litterman return blend and allocation."),
         ("src/factor_investing.py", "Builds momentum, low-volatility, trend, and factor-weighted portfolio tables."),
-        ("src/ml_models.py", "Builds features and trains a Random Forest model for experimental return prediction."),
+        ("src/ml_models.py", "Builds leak-safe ML features, model-zoo validation, explainability, confidence labels, and ML portfolio weights."),
         ("src/visualization.py", "Creates pure black themed charts for Streamlit."),
         ("src/reporting.py", "Prepares file explanations and downloadable CSV outputs."),
         ("project_report.md", "Final report content for college submission."),
@@ -101,4 +101,26 @@ def future_scope_items() -> list[str]:
         "Saved local scenario templates.",
         "More advanced ML and time-series forecasting models.",
         "PDF report export from the dashboard.",
+    ]
+
+
+def ml_education_cards() -> list[tuple[str, str]]:
+    """Return concise educational explanations for the ML dashboard."""
+    return [
+        (
+            "What the ML system is doing",
+            "It converts historical NSE prices into trailing technical features, trains multiple scikit-learn models, validates them through walk-forward folds, and uses the best model to score the latest ticker setup.",
+        ),
+        (
+            "Why time-series validation is used",
+            "Financial data is ordered by time, so random splitting would let future market regimes influence past training. Walk-forward validation trains on earlier dates and tests on later dates.",
+        ),
+        (
+            "Why predictions are not guaranteed",
+            "Markets are noisy, non-stationary, and affected by news, liquidity, and macro events that are not fully captured by historical price features.",
+        ),
+        (
+            "How ML differs from MPT",
+            "Modern Portfolio Theory estimates portfolio weights from historical average returns and covariance, while the ML portfolio starts from model-generated signals and then applies long-only allocation constraints.",
+        ),
     ]

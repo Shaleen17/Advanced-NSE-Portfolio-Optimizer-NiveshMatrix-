@@ -58,7 +58,24 @@ from src.metrics import (
     random_weight_vector,
     summarize_assets,
 )
-from src.ml_models import build_feature_dataset, predict_latest_returns, train_return_model
+from src.ml_models import (
+    FEATURE_COLUMNS,
+    ML_WEIGHT_METHOD_LABELS,
+    PREDICTION_HORIZONS,
+    TARGET_TYPE_CLASSIFICATION,
+    TARGET_TYPE_LABELS,
+    TARGET_TYPE_RANKING,
+    TARGET_TYPE_REGRESSION,
+    TARGET_TYPE_RISK_ADJUSTED,
+    add_prediction_confidence,
+    build_ml_signal_weights,
+    build_ml_report_card,
+    build_feature_dataset,
+    latest_feature_snapshot,
+    model_feature_importance,
+    predict_latest_returns,
+    train_model_zoo,
+)
 from src.optimizer import (
     OptimizationError,
     optimize_max_sharpe,
@@ -72,6 +89,7 @@ from src.reporting import (
     formula_reference,
     future_scope_items,
     methodology_steps,
+    ml_education_cards,
     project_file_purpose,
 )
 from src.risk import build_risk_table, build_strategy_return_frame
@@ -87,6 +105,8 @@ from src.visualization import (
     live_change_distribution_chart,
     live_top_movers_chart,
     live_volume_leaders_chart,
+    ml_model_performance_chart,
+    ml_feature_importance_chart,
     ml_prediction_chart,
     price_trend_chart,
     returns_distribution_chart,
@@ -541,6 +561,47 @@ def style_numeric_table(
         return f"color: {CHART_COLORS['text']}"
 
     return dataframe.style.format(formatters).map(color_signed)
+
+
+def ml_prediction_format_columns(
+    predictions: pd.DataFrame,
+    target_type: str,
+) -> tuple[list[str], list[str]]:
+    """Choose percentage and numeric formatting columns for ML prediction output."""
+    numeric_columns = [
+        column
+        for column in predictions.select_dtypes(include="number").columns
+        if column != "Ticker"
+    ]
+    score_columns = {
+        "Validation Quality Score",
+        "Prediction Strength Score",
+        "Volatility Safety Score",
+        "Confidence Score",
+    }
+    ratio_feature_columns = {
+        "Annualized Predicted Return",
+        "Volatility 20D",
+        "SMA20 / SMA50 - 1",
+        "Return 20D",
+        "Return 60D",
+        "Rolling Max Drawdown 60D",
+    }
+    percent_columns = [
+        column
+        for column in numeric_columns
+        if column.startswith("Probability ")
+        or column in score_columns
+        or column in ratio_feature_columns
+        or (
+            target_type in {TARGET_TYPE_REGRESSION, TARGET_TYPE_RANKING}
+            and column.startswith("Predicted ")
+        )
+    ]
+    number_columns = [
+        column for column in numeric_columns if column not in percent_columns
+    ]
+    return percent_columns, number_columns
 
 
 @st.cache_data(show_spinner=False, ttl=60)
@@ -1101,19 +1162,6 @@ def main() -> None:
         st.error(str(error))
         st.stop()
 
-    strategy_weights = {
-        "Equal Weight": equal_weights,
-        "Random Portfolio": random_weights,
-        "Maximum Sharpe": max_sharpe_weights,
-        "Minimum Volatility": min_volatility_weights,
-    }
-    comparison = build_strategy_comparison(
-        strategy_weights, annual_returns, annual_covariance, risk_free_rate
-    )
-    strategy_returns = build_strategy_return_frame(daily_returns, strategy_weights)
-    risk_table = build_risk_table(strategy_returns, benchmark_returns, risk_free_rate)
-    best_strategy = comparison.iloc[0]
-
     black_litterman_weights = None
     black_litterman_table = None
     black_litterman_error = ""
@@ -1130,6 +1178,48 @@ def main() -> None:
         factor_weights = build_factor_portfolio_weights(factor_scores, factor_size)
     except Exception as error:
         factor_error = str(error)
+
+    strategy_weights = {
+        "Equal Weight": equal_weights,
+        "Random Portfolio": random_weights,
+        "Maximum Sharpe": max_sharpe_weights,
+        "Minimum Volatility": min_volatility_weights,
+    }
+    if black_litterman_weights is not None:
+        strategy_weights["Black-Litterman"] = black_litterman_weights
+    if not factor_error and not factor_weights.empty:
+        factor_series = (
+            factor_weights.set_index("Ticker")["Factor Weight"]
+            .reindex(prices.columns)
+            .fillna(0.0)
+            .astype("float64")
+        )
+        strategy_weights["Factor Portfolio"] = factor_series.to_numpy()
+
+    ml_portfolio_state = st.session_state.get("ml_portfolio_state")
+    ml_portfolio_weights = None
+    ml_state_matches_prices = (
+        isinstance(ml_portfolio_state, dict)
+        and ml_portfolio_state.get("tickers") == tuple(prices.columns)
+        and ml_portfolio_state.get("start_date") == str(start_date)
+        and ml_portfolio_state.get("end_date") == str(end_date)
+    )
+    if ml_state_matches_prices:
+        ml_weight_map = ml_portfolio_state.get("weights_by_ticker", {})
+        ml_portfolio_weights = np.array(
+            [float(ml_weight_map.get(ticker, 0.0)) for ticker in prices.columns],
+            dtype="float64",
+        )
+        if ml_portfolio_weights.sum() > 0:
+            ml_portfolio_weights = ml_portfolio_weights / ml_portfolio_weights.sum()
+            strategy_weights["ML Portfolio"] = ml_portfolio_weights
+
+    comparison = build_strategy_comparison(
+        strategy_weights, annual_returns, annual_covariance, risk_free_rate
+    )
+    strategy_returns = build_strategy_return_frame(daily_returns, strategy_weights)
+    risk_table = build_risk_table(strategy_returns, benchmark_returns, risk_free_rate)
+    best_strategy = comparison.iloc[0]
 
     top_cards = st.columns(4)
     with top_cards[0]:
@@ -1247,10 +1337,8 @@ def main() -> None:
         )
 
         allocations = {
-            "Equal Weight": build_allocation_table(prices.columns.tolist(), equal_weights),
-            "Random Portfolio": build_allocation_table(prices.columns.tolist(), random_weights),
-            "Maximum Sharpe": build_allocation_table(prices.columns.tolist(), max_sharpe_weights),
-            "Minimum Volatility": build_allocation_table(prices.columns.tolist(), min_volatility_weights),
+            strategy_name: build_allocation_table(prices.columns.tolist(), weights)
+            for strategy_name, weights in strategy_weights.items()
         }
         selected_allocation = st.selectbox("Allocation to visualize", list(allocations.keys()))
         selected_table = allocations[selected_allocation]
@@ -1379,31 +1467,409 @@ def main() -> None:
             "Important ML note",
             "Machine learning predictions are experimental. Stock returns are noisy, and this model should not be treated as a trading signal or profit guarantee.",
         )
+        terminal_band(
+            "ML Methodology",
+            "Leak-safe features, walk-forward validation, explainability, confidence scoring, and constrained signal weighting.",
+        )
+        education_columns = st.columns(2)
+        for index, (title, body) in enumerate(ml_education_cards()):
+            with education_columns[index % 2]:
+                info_card(title, body)
+        ml_control_columns = st.columns(2)
+        target_label_to_key = {label: key for key, label in TARGET_TYPE_LABELS.items()}
+        with ml_control_columns[0]:
+            selected_target_label = st.selectbox(
+                "Prediction target",
+                options=list(target_label_to_key.keys()),
+            )
+        with ml_control_columns[1]:
+            selected_horizon = st.selectbox(
+                "Prediction horizon",
+                options=list(PREDICTION_HORIZONS),
+                index=list(PREDICTION_HORIZONS).index(21),
+                format_func=lambda days: f"{days} trading days",
+            )
+        selected_target_type = target_label_to_key[selected_target_label]
+        ml_portfolio_columns = st.columns(4)
+        weighting_label_to_key = {
+            label: key for key, label in ML_WEIGHT_METHOD_LABELS.items()
+        }
+        with ml_portfolio_columns[0]:
+            selected_weighting_label = st.selectbox(
+                "ML portfolio weighting",
+                options=list(weighting_label_to_key.keys()),
+            )
+        with ml_portfolio_columns[1]:
+            selected_max_weight = st.number_input(
+                "Max stock weight",
+                min_value=0.05,
+                max_value=1.0,
+                value=0.25,
+                step=0.05,
+            )
+        with ml_portfolio_columns[2]:
+            selected_min_weight = st.number_input(
+                "Minimum weight threshold",
+                min_value=0.0,
+                max_value=0.25,
+                value=0.01,
+                step=0.005,
+            )
+        with ml_portfolio_columns[3]:
+            selected_min_confidence = st.selectbox(
+                "Minimum confidence",
+                options=["Low", "Medium", "High"],
+            )
+        selected_weighting_method = weighting_label_to_key[selected_weighting_label]
         if st.button("Run ML return prediction"):
             try:
-                dataset = build_feature_dataset(prices)
-                model, ml_metrics = train_return_model(dataset)
-                predictions = predict_latest_returns(prices, model)
-                st.markdown("#### Validation Metrics")
-                st.dataframe(
-                    style_numeric_table(
-                        ml_metrics,
-                        percent_columns=["Directional Accuracy"],
-                        number_columns=["MAE", "RMSE"],
-                    ),
-                    width="stretch",
+                dataset = build_feature_dataset(
+                    prices,
+                    horizon_days=selected_horizon,
+                    target_type=selected_target_type,
                 )
-                st.markdown("#### Latest Predictions")
-                st.dataframe(
-                    style_numeric_table(
-                        predictions,
-                        percent_columns=["Predicted 21D Return", "Annualized Predicted Return"],
-                    ),
-                    width="stretch",
+                feature_snapshot = latest_feature_snapshot(
+                    prices,
+                    horizon_days=selected_horizon,
                 )
-                st.pyplot(ml_prediction_chart(predictions), width="stretch")
+                training_result = train_model_zoo(
+                    dataset,
+                    target_type=selected_target_type,
+                )
+                model = training_result.best_model
+                ml_metrics = training_result.fold_metrics
+                model_comparison = training_result.model_comparison
+                predictions = predict_latest_returns(
+                    prices,
+                    model,
+                    horizon_days=selected_horizon,
+                    target_type=selected_target_type,
+                )
+                feature_importance = model_feature_importance(
+                    model,
+                    FEATURE_COLUMNS,
+                    top_n=30,
+                )
+                predictions = add_prediction_confidence(
+                    predictions,
+                    ml_metrics,
+                    feature_snapshot,
+                    selected_target_type,
+                    training_result.best_model_name,
+                )
+                report_card = build_ml_report_card(
+                    selected_model=training_result.best_model_name,
+                    target_type=selected_target_type,
+                    horizon_days=int(selected_horizon),
+                    training_rows=len(dataset),
+                    feature_count=len(FEATURE_COLUMNS),
+                    model_comparison=model_comparison,
+                    fold_metrics=ml_metrics,
+                    feature_importance=feature_importance,
+                )
+                confidence_thresholds = {"Low": 0.0, "Medium": 0.45, "High": 0.70}
+                minimum_confidence_score = confidence_thresholds[selected_min_confidence]
+                prediction_signals_for_weights = predictions[
+                    predictions["Confidence Score"] >= minimum_confidence_score
+                ].copy()
+                if prediction_signals_for_weights.empty:
+                    raise ValueError(
+                        "No predictions meet the selected minimum confidence level. "
+                        "Choose a lower confidence filter or a broader ticker set."
+                    )
+                ml_allocation = build_ml_signal_weights(
+                    prediction_signals_for_weights,
+                    method=selected_weighting_method,
+                    max_weight=float(selected_max_weight),
+                    min_weight=float(selected_min_weight),
+                )
+                st.session_state["ml_portfolio_state"] = {
+                    "tickers": tuple(prices.columns),
+                    "start_date": str(start_date),
+                    "end_date": str(end_date),
+                    "target_type": selected_target_type,
+                    "target_label": TARGET_TYPE_LABELS[selected_target_type],
+                    "horizon_days": int(selected_horizon),
+                    "weighting_method": selected_weighting_method,
+                    "weighting_label": ML_WEIGHT_METHOD_LABELS[selected_weighting_method],
+                    "max_weight": float(selected_max_weight),
+                    "min_weight": float(selected_min_weight),
+                    "minimum_confidence": selected_min_confidence,
+                    "minimum_confidence_score": minimum_confidence_score,
+                    "training_rows": len(dataset),
+                    "weights_by_ticker": dict(
+                        zip(ml_allocation["Ticker"], ml_allocation["Weight"])
+                    ),
+                    "allocation": ml_allocation,
+                    "predictions": predictions,
+                    "feature_snapshot": feature_snapshot,
+                    "feature_importance": feature_importance,
+                    "report_card": report_card,
+                    "fold_metrics": ml_metrics,
+                    "model_comparison": model_comparison,
+                    "best_model_name": training_result.best_model_name,
+                }
+                st.rerun()
             except Exception as error:
                 st.warning(f"ML prediction could not be completed: {error}")
+
+        ml_display_state = st.session_state.get("ml_portfolio_state")
+        ml_display_matches_prices = (
+            isinstance(ml_display_state, dict)
+            and ml_display_state.get("tickers") == tuple(prices.columns)
+            and ml_display_state.get("start_date") == str(start_date)
+            and ml_display_state.get("end_date") == str(end_date)
+        )
+        if ml_display_matches_prices:
+            state_target_type = ml_display_state["target_type"]
+            predictions = ml_display_state["predictions"].copy()
+            feature_snapshot = ml_display_state["feature_snapshot"]
+            ml_metrics = ml_display_state["fold_metrics"]
+            model_comparison = ml_display_state["model_comparison"]
+            ml_allocation = ml_display_state["allocation"]
+            feature_importance = ml_display_state.get("feature_importance", pd.DataFrame())
+            report_card = ml_display_state.get("report_card", pd.DataFrame())
+            if {"Confidence Label", "Risk Warnings"}.difference(predictions.columns):
+                predictions = add_prediction_confidence(
+                    predictions,
+                    ml_metrics,
+                    feature_snapshot,
+                    state_target_type,
+                    ml_display_state.get("best_model_name"),
+                )
+            feature_summary = pd.DataFrame(
+                [
+                    {
+                        "Selected Tickers": len(prices.columns),
+                        "Target Type": ml_display_state["target_label"],
+                        "Prediction Horizon": f"{ml_display_state['horizon_days']} trading days",
+                        "Selected Model": ml_display_state["best_model_name"],
+                        "Weighting Method": ml_display_state["weighting_label"],
+                        "Max Stock Weight": ml_display_state["max_weight"],
+                        "Minimum Weight Threshold": ml_display_state["min_weight"],
+                        "Minimum Confidence": ml_display_state.get(
+                            "minimum_confidence",
+                            "Low",
+                        ),
+                        "Feature Count": len(FEATURE_COLUMNS),
+                        "Training Rows": ml_display_state.get("training_rows", "N/A"),
+                        "Latest Feature Date": (
+                            feature_snapshot["Date"].max()
+                            if not feature_snapshot.empty
+                            else "N/A"
+                        ),
+                    }
+                ]
+            )
+            if not report_card.empty:
+                report_values = report_card.set_index("Metric")["Value"].to_dict()
+                terminal_band(
+                    "ML Report Card",
+                    "Model selection, validation quality, explainability, and signal controls.",
+                )
+                report_cards_top = st.columns(4)
+                with report_cards_top[0]:
+                    metric_card("Selected Model", str(report_values.get("Selected Model", "N/A")))
+                with report_cards_top[1]:
+                    metric_card("Target", str(report_values.get("Target Type", "N/A")))
+                with report_cards_top[2]:
+                    metric_card("Horizon", str(report_values.get("Prediction Horizon", "N/A")))
+                with report_cards_top[3]:
+                    metric_card("Feature Count", str(report_values.get("Feature Count", "N/A")))
+
+                report_cards_bottom = st.columns(5)
+                with report_cards_bottom[0]:
+                    metric_card("Training Rows", str(report_values.get("Training Rows", "N/A")))
+                with report_cards_bottom[1]:
+                    metric_card(
+                        "Validation Score",
+                        safe_float(report_values.get("Average Validation Metric"), digits=4),
+                    )
+                with report_cards_bottom[2]:
+                    metric_card("Primary Metric", str(report_values.get("Primary Validation Metric", "N/A")))
+                with report_cards_bottom[3]:
+                    metric_card("Best Fold", str(report_values.get("Best Fold", "N/A")))
+                with report_cards_bottom[4]:
+                    metric_card("Worst Fold", str(report_values.get("Worst Fold", "N/A")))
+
+                info_card(
+                    "Top Predictive Features",
+                    str(report_values.get("Top Predictive Features", "N/A")),
+                )
+
+            st.markdown("#### Feature Engineering Snapshot")
+            st.dataframe(
+                style_numeric_table(
+                    feature_summary,
+                    percent_columns=["Max Stock Weight", "Minimum Weight Threshold"],
+                ),
+                width="stretch",
+                hide_index=True,
+            )
+            st.dataframe(
+                style_numeric_table(
+                    feature_snapshot,
+                    number_columns=[
+                        column
+                        for column in feature_snapshot.columns
+                        if column not in ["Date", "Ticker"]
+                    ],
+                ),
+                width="stretch",
+            )
+            metric_percent_columns: list[str] = []
+            metric_number_columns: list[str] = []
+            if state_target_type == TARGET_TYPE_CLASSIFICATION:
+                metric_percent_columns = [
+                    "Accuracy",
+                    "Precision",
+                    "Recall",
+                    "F1",
+                    "ROC-AUC",
+                ]
+            elif state_target_type == TARGET_TYPE_RANKING:
+                metric_percent_columns = ["Top-3 Hit Rate"]
+                metric_number_columns = ["Spearman Correlation"]
+            else:
+                metric_number_columns = ["MAE", "RMSE", "R2"]
+            comparison_percent_columns = [
+                f"Avg {column}" for column in metric_percent_columns
+            ]
+            comparison_number_columns = [
+                f"Avg {column}" for column in metric_number_columns
+            ] + ["Selection Score"]
+            st.markdown("#### Model Comparison")
+            st.dataframe(
+                style_numeric_table(
+                    model_comparison,
+                    percent_columns=comparison_percent_columns,
+                    number_columns=comparison_number_columns,
+                ),
+                width="stretch",
+                hide_index=True,
+            )
+            st.pyplot(ml_model_performance_chart(ml_metrics), width="stretch")
+            st.markdown("#### Explainability")
+            if feature_importance.empty:
+                st.caption("The selected model does not expose feature importances or coefficients.")
+            else:
+                st.dataframe(
+                    style_numeric_table(
+                        feature_importance,
+                        number_columns=[
+                            "Importance",
+                            "Coefficient",
+                            "Absolute Importance",
+                        ],
+                    ),
+                    width="stretch",
+                    hide_index=True,
+                )
+                st.pyplot(ml_feature_importance_chart(feature_importance), width="stretch")
+            st.markdown("#### Walk-Forward Fold Metrics")
+            st.dataframe(
+                style_numeric_table(
+                    ml_metrics,
+                    percent_columns=metric_percent_columns,
+                    number_columns=metric_number_columns,
+                ),
+                width="stretch",
+            )
+            confidence_counts = predictions["Confidence Label"].value_counts()
+            warning_count = int((predictions["Risk Warnings"] != "None").sum())
+            confidence_cards = st.columns(4)
+            with confidence_cards[0]:
+                metric_card("High Confidence", str(int(confidence_counts.get("High", 0))), 1 if confidence_counts.get("High", 0) else None)
+            with confidence_cards[1]:
+                metric_card("Medium Confidence", str(int(confidence_counts.get("Medium", 0))))
+            with confidence_cards[2]:
+                metric_card("Low Confidence", str(int(confidence_counts.get("Low", 0))), -1 if confidence_counts.get("Low", 0) else None)
+            with confidence_cards[3]:
+                metric_card("Risk Warnings", str(warning_count), -1 if warning_count else None)
+            st.markdown("#### Latest Predictions")
+            prediction_percent_columns, prediction_number_columns = (
+                ml_prediction_format_columns(predictions, state_target_type)
+            )
+            st.dataframe(
+                style_numeric_table(
+                    predictions,
+                    percent_columns=prediction_percent_columns,
+                    number_columns=prediction_number_columns,
+                ),
+                width="stretch",
+            )
+            st.pyplot(ml_prediction_chart(predictions), width="stretch")
+
+            st.markdown("#### ML Portfolio Allocation")
+            st.dataframe(
+                style_numeric_table(
+                    ml_allocation,
+                    percent_columns=["Weight"],
+                    number_columns=["ML Signal", "Raw Weight Score"],
+                ),
+                width="stretch",
+                hide_index=True,
+            )
+            st.pyplot(
+                allocation_chart(ml_allocation, "Weight", "ML Portfolio Allocation"),
+                width="stretch",
+            )
+            ml_risk_row = risk_table[risk_table["Strategy"] == "ML Portfolio"]
+            if not ml_risk_row.empty:
+                st.markdown("#### ML Portfolio Risk Metrics")
+                st.dataframe(
+                    style_numeric_table(
+                        ml_risk_row,
+                        percent_columns=[
+                            "Annualized Return",
+                            "Annualized Volatility",
+                            "Maximum Drawdown",
+                            "Daily VaR 95%",
+                            "Daily CVaR 95%",
+                        ],
+                        number_columns=["Sharpe Ratio", "Sortino Ratio"],
+                    ),
+                    width="stretch",
+                    hide_index=True,
+                )
+            st.markdown("#### ML Downloads")
+            download_cols = st.columns(4)
+            with download_cols[0]:
+                st.download_button(
+                    "ML predictions CSV",
+                    data=dataframe_to_csv_bytes(predictions),
+                    file_name="ml_predictions.csv",
+                    mime="text/csv",
+                    key="download_ml_predictions",
+                )
+            with download_cols[1]:
+                st.download_button(
+                    "Validation metrics CSV",
+                    data=dataframe_to_csv_bytes(ml_metrics),
+                    file_name="ml_validation_metrics.csv",
+                    mime="text/csv",
+                    key="download_ml_validation_metrics",
+                )
+            with download_cols[2]:
+                st.download_button(
+                    "Feature importance CSV",
+                    data=dataframe_to_csv_bytes(feature_importance),
+                    file_name="ml_feature_importance.csv",
+                    mime="text/csv",
+                    key="download_ml_feature_importance",
+                )
+            with download_cols[3]:
+                st.download_button(
+                    "ML allocation CSV",
+                    data=dataframe_to_csv_bytes(ml_allocation),
+                    file_name="ml_portfolio_allocation.csv",
+                    mime="text/csv",
+                    key="download_ml_portfolio_allocation",
+                )
+            st.warning(
+                "ML Portfolio is experimental, derived from noisy model predictions, "
+                "and is not financial advice or a guarantee of returns."
+            )
         else:
             st.caption("Click the button to train the model. This may take a little time.")
 

@@ -66,7 +66,7 @@
 - Transaction cost assumption
 - Black-Litterman model
 - Factor investing analysis
-- Machine learning return prediction
+- Advanced machine learning lab with walk-forward validation, explainability, confidence labels, and ML signal portfolio construction
 - Downloadable CSV outputs
 - College project report content inside the app
 
@@ -261,6 +261,20 @@ VaR 95% = 5th percentile of historical daily returns
 CVaR 95% = Average of returns worse than or equal to VaR 95%
 ```
 
+## Machine Learning Lab
+
+The Machine Learning tab is designed for college and GitHub demos while keeping the warnings clear. It converts historical prices into trailing technical indicators, trains multiple scikit-learn models, validates them with walk-forward time-series folds, and produces ticker-level predictions for selected horizons.
+
+- **Targets:** future return regression, direction classification, risk-adjusted return, and cross-sectional return ranking
+- **Horizons:** 5, 21, and 63 trading days
+- **Models:** Ridge, Lasso, Random Forest, Extra Trees, Gradient Boosting, HistGradientBoosting when available, Logistic Regression, and Random Forest Classifier
+- **Explainability:** feature importance for tree models and coefficient tables for linear models
+- **Confidence controls:** validation quality, prediction strength, volatility safety score, High / Medium / Low confidence labels, and risk warnings
+- **ML portfolio:** long-only signal weights with softmax, top-k rank, positive-signal-only, and volatility-adjusted methods
+- **Downloads:** ML predictions, validation metrics, feature importance, and ML allocation CSV files
+
+The ML workflow uses only information available up to each prediction date for features. Future returns are used only as supervised learning targets during historical training and validation.
+
 ## Dashboard Sections
 
 - **Basic:** Explanations, data loading, Adjusted Close prices, missing values, price trends
@@ -270,7 +284,7 @@ CVaR 95% = Average of returns worse than or equal to VaR 95%
 - **Backtesting:** Monthly rebalancing with transaction cost assumption
 - **Black-Litterman:** Equilibrium return and momentum-view blended allocation
 - **Factor Investing:** Momentum, low-volatility, trend, and factor-weighted portfolio
-- **Machine Learning:** Random Forest return prediction experiment
+- **Machine Learning:** Model zoo, feature engineering, target selection, explainability, confidence labels, risk warnings, ML portfolio allocation, and CSV downloads
 - **Report:** Methodology, formulas, file map, conclusion, future scope, disclaimer
 - **Downloads:** CSV exports
 
@@ -291,7 +305,7 @@ CVaR 95% = Average of returns worse than or equal to VaR 95%
 - Backtest performance table
 - Black-Litterman allocation
 - Factor portfolio weights
-- ML prediction table
+- ML prediction, confidence, explainability, validation, and allocation tables
 
 ## Deploy On Streamlit Cloud
 

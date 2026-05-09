@@ -171,19 +171,99 @@ def factor_score_chart(factor_scores: pd.DataFrame) -> plt.Figure:
 
 
 def ml_prediction_chart(predictions: pd.DataFrame) -> plt.Figure:
-    """Plot latest ML-predicted 21-day returns."""
+    """Plot the primary latest ML prediction column."""
+    value_column = _primary_ml_prediction_column(predictions)
     top = predictions.head(15)
     colors = [
         CHART_COLORS["profit"] if value >= 0 else CHART_COLORS["loss"]
-        for value in top["Predicted 21D Return"]
+        for value in top[value_column]
     ]
     fig, ax = plt.subplots(figsize=(11, 5))
-    ax.bar(top["Ticker"], top["Predicted 21D Return"], color=colors)
-    apply_chart_theme(ax, "Machine Learning Predicted 21D Returns")
-    ax.set_ylabel("Predicted Return")
+    ax.bar(top["Ticker"], top[value_column], color=colors)
+    apply_chart_theme(ax, f"Machine Learning {value_column}")
+    ax.set_ylabel(value_column)
     ax.tick_params(axis="x", rotation=45)
     fig.tight_layout()
     return fig
+
+
+def ml_model_performance_chart(fold_metrics: pd.DataFrame) -> plt.Figure:
+    """Plot walk-forward model performance across folds."""
+    metric_column = _primary_ml_performance_metric(fold_metrics)
+    fig, ax = plt.subplots(figsize=(11, 5))
+
+    for model_name, group in fold_metrics.dropna(subset=[metric_column]).groupby("Model"):
+        group = group.sort_values("Fold")
+        ax.plot(
+            group["Fold"],
+            group[metric_column],
+            marker="o",
+            linewidth=1.8,
+            label=model_name,
+        )
+
+    apply_chart_theme(ax, f"Walk-Forward Model Comparison: {metric_column}")
+    ax.set_xlabel("Fold")
+    ax.set_ylabel(metric_column)
+    style_legend(ax)
+    fig.tight_layout()
+    return fig
+
+
+def ml_feature_importance_chart(feature_importance: pd.DataFrame, limit: int = 12) -> plt.Figure:
+    """Plot top ML feature importances or absolute coefficients."""
+    top = feature_importance.head(limit).sort_values("Absolute Importance")
+    fig, ax = plt.subplots(figsize=(11, 5))
+    if not top.empty:
+        ax.barh(top["Feature"], top["Absolute Importance"], color=CHART_COLORS["profit"])
+    title = "Top ML Predictive Features"
+    if not top.empty and "Explanation Type" in top.columns:
+        title = str(top["Explanation Type"].iloc[0])
+    apply_chart_theme(ax, title)
+    ax.set_xlabel("Absolute Importance")
+    fig.tight_layout()
+    return fig
+
+
+def _primary_ml_performance_metric(fold_metrics: pd.DataFrame) -> str:
+    """Choose the metric column to compare model validation performance."""
+    for column in [
+        "RMSE",
+        "ROC-AUC",
+        "F1",
+        "Spearman Correlation",
+        "Top-3 Hit Rate",
+    ]:
+        if column in fold_metrics.columns and fold_metrics[column].notna().any():
+            return column
+    raise ValueError("No numeric ML validation metric is available for charting.")
+
+
+def _primary_ml_prediction_column(predictions: pd.DataFrame) -> str:
+    """Pick the best numeric prediction column for the ML bar chart."""
+    probability_columns = [
+        column for column in predictions.columns if column.startswith("Probability ")
+    ]
+    if probability_columns:
+        return probability_columns[0]
+
+    predicted_columns = [
+        column
+        for column in predictions.columns
+        if column.startswith("Predicted ") and column != "Predicted Direction"
+    ]
+    if predicted_columns:
+        return predicted_columns[0]
+
+    numeric_columns = [
+        column
+        for column in predictions.select_dtypes(include="number").columns
+        if column != "Ticker"
+    ]
+    if numeric_columns:
+        return numeric_columns[0]
+
+    raise ValueError("No numeric ML prediction column is available for charting.")
 
 
 def live_top_movers_chart(live_quotes: pd.DataFrame, gainers: bool = True, limit: int = 8) -> plt.Figure:
